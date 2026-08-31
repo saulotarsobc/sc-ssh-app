@@ -4,6 +4,10 @@ A local-first desktop application for managing SSH identities, OpenSSH host conf
 
 The renderer never receives filesystem, process, or Electron access. All privileged operations run in Electron's main process through a narrow, validated `window.sshManager` API.
 
+![banner](./demo/banner.png)
+
+---
+
 ## Features
 
 - Inventory and health checks for keys in `~/.ssh`
