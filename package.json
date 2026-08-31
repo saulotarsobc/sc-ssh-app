@@ -3,7 +3,7 @@
   "displayName": "SC - SSH Keys Manager",
   "description": "A secure, cross-platform desktop manager for SSH keys and host configuration",
   "private": false,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "author": {
     "name": "Saulo Costa",

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { KeyService, fingerprintPublicKey } from "../backend/services/keys";
+import type { StoredKeyMetadata } from "../backend/services/storage";
 import { MetadataStore } from "../backend/services/storage";
 
 const temporary: string[] = [];
@@ -63,5 +64,41 @@ describe("key service", () => {
     const restored = await service.restore(key.id);
     expect(restored.status).toBe("active");
     expect(restored.privateKeyPath).toBeTruthy();
+  });
+
+  it("replaces stale metadata when a path is reused for a newly created key", async () => {
+    const { service, sshDirectory, store } = await harness();
+    const reusedPath = path.join(sshDirectory, "id_ed25519_reused");
+    const stale: StoredKeyMetadata = {
+      id: "stale-record",
+      fingerprint: "SHA256:stale",
+      name: "old key",
+      tags: [],
+      managed: false,
+      originalPath: reusedPath,
+      rotationPolicy: {
+        enabled: true,
+        intervalDays: 90,
+        reminderDays: 14,
+      },
+      createdAt: "2025-01-01T00:00:00.000Z",
+      updatedAt: "2025-01-01T00:00:00.000Z",
+    };
+    await store.saveKey(stale);
+
+    const created = await service.create({
+      name: "reused",
+      algorithm: "ed25519",
+      comment: "",
+      tags: [],
+      rotationIntervalDays: 90,
+      rotationReminderDays: 14,
+      allowUnprotected: true,
+    });
+
+    expect(created.name).toBe("reused");
+    expect(created.id).not.toBe(stale.id);
+    expect(store.getKeyMetadata()).toHaveLength(1);
+    expect(store.findKey(stale.id)).toBeUndefined();
   });
 });

@@ -84,6 +84,7 @@ export class MetadataStore {
         rotations: parsed.rotations ?? [],
         settings: { ...this.state.settings, ...parsed.settings },
       };
+      if (this.deduplicateKeys()) await this.persist();
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT" && error instanceof SyntaxError) {
@@ -118,6 +119,14 @@ export class MetadataStore {
   }
 
   async saveKey(value: StoredKeyMetadata): Promise<void> {
+    const conflicts = Object.values(this.state.keys).filter(
+      (item) =>
+        item.id !== value.id &&
+        (item.fingerprint === value.fingerprint ||
+          this.sameActivePath(item, value)),
+    );
+    if (!value.managed && conflicts.some((item) => item.managed)) return;
+    for (const conflict of conflicts) delete this.state.keys[conflict.id];
     this.state.keys[value.id] = structuredClone(value);
     await this.persist();
   }
@@ -198,5 +207,50 @@ export class MetadataStore {
       await rename(temporary, target);
     });
     await this.writeChain;
+  }
+
+  private deduplicateKeys(): boolean {
+    const original = Object.values(this.state.keys);
+    const unique: StoredKeyMetadata[] = [];
+    for (const item of original) {
+      const conflicts = unique.filter(
+        (candidate) =>
+          candidate.fingerprint === item.fingerprint ||
+          this.sameActivePath(candidate, item),
+      );
+      if (!conflicts.length) {
+        unique.push(item);
+        continue;
+      }
+      const winner = [item, ...conflicts].sort((left, right) => {
+        if (left.managed !== right.managed) return left.managed ? -1 : 1;
+        return right.updatedAt.localeCompare(left.updatedAt);
+      })[0];
+      for (const conflict of conflicts) {
+        unique.splice(unique.indexOf(conflict), 1);
+      }
+      unique.push(winner);
+    }
+    if (unique.length === original.length) return false;
+    this.state.keys = Object.fromEntries(
+      unique.map((item) => [item.id, structuredClone(item)]),
+    );
+    return true;
+  }
+
+  private samePath(left?: string, right?: string): boolean {
+    return Boolean(
+      left &&
+      right &&
+      path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase(),
+    );
+  }
+
+  private sameActivePath(
+    left: StoredKeyMetadata,
+    right: StoredKeyMetadata,
+  ): boolean {
+    if (left.archivedPrivatePath || right.archivedPrivatePath) return false;
+    return this.samePath(left.originalPath, right.originalPath);
   }
 }

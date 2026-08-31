@@ -616,13 +616,13 @@ export class KeyService {
     fingerprint: string,
     filePath: string,
   ): StoredKeyMetadata | undefined {
-    return this.store
-      .getKeyMetadata()
-      .find(
-        (item) =>
-          item.fingerprint === fingerprint ||
-          item.originalPath?.toLowerCase() === filePath.toLowerCase(),
-      );
+    const metadata = this.store.getKeyMetadata();
+    return (
+      metadata.find((item) => item.fingerprint === fingerprint) ??
+      metadata.find(
+        (item) => item.originalPath?.toLowerCase() === filePath.toLowerCase(),
+      )
+    );
   }
 
   private defaultPolicy(createdAt: string): RotationPolicy {
