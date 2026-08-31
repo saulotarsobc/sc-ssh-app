@@ -92,6 +92,7 @@ export type AuditOperation =
   | "host.updated"
   | "host.deleted"
   | "host.tested"
+  | "host.key-installed"
   | "config.updated"
   | "config.organized"
   | "config.restored"
@@ -165,6 +166,25 @@ export interface HostInput {
   identitiesOnly: boolean;
   serverAliveInterval?: number;
   additionalDirectives: Record<string, string>;
+}
+
+export interface ServerSetupInput {
+  alias: string;
+  hostname: string;
+  port: number;
+  user: string;
+  password: SecretInput;
+  algorithm: "ed25519" | "rsa";
+  comment: string;
+  passphrase?: SecretInput;
+  allowUnprotected: boolean;
+  acceptHostFingerprint?: string;
+}
+
+export interface ServerSetupResult {
+  host: HostRecord;
+  key: SshKeyRecord;
+  connection: ConnectionTestResult;
 }
 
 export interface ConnectionCredentials {
@@ -287,11 +307,16 @@ export interface SshManagerApi {
   };
   hosts: {
     list(): Promise<OperationResult<HostRecord[]>>;
+    setup(input: ServerSetupInput): Promise<OperationResult<ServerSetupResult>>;
     save(input: HostInput): Promise<OperationResult<HostRecord>>;
     remove(id: string): Promise<OperationResult<boolean>>;
     test(
       id: string,
       credentials?: ConnectionCredentials,
+    ): Promise<OperationResult<ConnectionTestResult>>;
+    installKey(
+      id: string,
+      credentials: ConnectionCredentials,
     ): Promise<OperationResult<ConnectionTestResult>>;
     openTerminal(id: string): Promise<OperationResult<boolean>>;
   };

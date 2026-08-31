@@ -17,6 +17,7 @@ import {
   keyImportSchema,
   keyUpdateSchema,
   rotationInputSchema,
+  serverSetupSchema,
 } from "../../../shared/schemas";
 import { ManagerError, success, toFailure } from "../../services/errors";
 import type { SshManager } from "../../services/manager";
@@ -123,6 +124,9 @@ export function registerIpcHandlers(manager: SshManager): void {
   });
 
   handle("manager:hosts:list", () => manager.hosts());
+  handle("manager:hosts:setup", (input: unknown) =>
+    manager.setupHost(validate(serverSetupSchema, input)),
+  );
   handle("manager:hosts:save", (input: unknown) =>
     manager.saveHost(validate(hostInputSchema, input)),
   );
@@ -132,6 +136,12 @@ export function registerIpcHandlers(manager: SshManager): void {
   });
   handle("manager:hosts:test", (id: string, credentials?: unknown) =>
     manager.testHost(
+      id,
+      validate(connectionCredentialsSchema, credentials) ?? {},
+    ),
+  );
+  handle("manager:hosts:install-key", (id: string, credentials: unknown) =>
+    manager.installHostKey(
       id,
       validate(connectionCredentialsSchema, credentials) ?? {},
     ),

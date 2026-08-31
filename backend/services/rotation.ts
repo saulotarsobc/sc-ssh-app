@@ -4,6 +4,8 @@ import type { Client, SFTPWrapper } from "ssh2";
 import type {
   HostInput,
   HostRecord,
+  ConnectionCredentials,
+  ConnectionTestResult,
   OperationProgress,
   RotationInput,
   RotationRun,
@@ -37,6 +39,19 @@ const authorizedFingerprint = (line: string): string | undefined => {
   }
 };
 
+export const mergeAuthorizedKey = (
+  content: string,
+  publicKey: string,
+  fingerprint: string,
+): { content: string; added: boolean } => {
+  const lines = content.split(/\r?\n/).filter(Boolean);
+  if (lines.some((line) => authorizedFingerprint(line) === fingerprint)) {
+    return { content, added: false };
+  }
+  lines.push(publicKey.trim());
+  return { content: `${lines.join("\n")}\n`, added: true };
+};
+
 const asHostInput = (host: HostRecord, key?: SshKeyRecord): HostInput => ({
   id: host.id,
   alias: host.alias,
@@ -63,6 +78,86 @@ export class RotationService {
 
   async list(): Promise<RotationRun[]> {
     return this.store.getRotations();
+  }
+
+  async installExistingKey(
+    host: HostRecord,
+    key: SshKeyRecord,
+    credentials: ConnectionCredentials,
+  ): Promise<ConnectionTestResult> {
+    if (!credentials.password?.value)
+      throw new ManagerError(
+        "VALIDATION_ERROR",
+        "Enter the server password to install the public key",
+      );
+    if (!key.publicKey || !key.privateKeyPath)
+      throw new ManagerError(
+        "CONFLICT",
+        "A complete local key pair is required",
+      );
+
+    const bootstrap = await this.connectWithPassword(host, credentials);
+    let added: boolean;
+    try {
+      added = await this.installRemoteKey(
+        bootstrap.client,
+        key.publicKey,
+        key.fingerprint,
+      );
+    } finally {
+      bootstrap.client.end();
+    }
+
+    const test = await this.connections.test(host, key, {
+      passphrase: credentials.passphrase,
+      acceptHostFingerprint: credentials.acceptHostFingerprint,
+    });
+    if (!test.success) {
+      if (added) {
+        const rollback = await this.connectWithPassword(host, credentials);
+        try {
+          await this.removeRemoteKeyIfPresent(rollback.client, key.fingerprint);
+        } finally {
+          rollback.client.end();
+        }
+      }
+      throw new ManagerError(
+        "AUTHENTICATION_FAILED",
+        `The key was installed but verification failed: ${test.message}`,
+      );
+    }
+    await this.store.audit(
+      "host.key-installed",
+      "success",
+      host.alias,
+      `${added ? "Installed and verified" : "Verified existing"} public key ${key.fingerprint}`,
+    );
+    return test;
+  }
+
+  private async connectWithPassword(
+    host: HostRecord,
+    credentials: ConnectionCredentials,
+  ) {
+    try {
+      return await this.connections.connect(host, undefined, {
+        password: credentials.password,
+        acceptHostFingerprint: credentials.acceptHostFingerprint,
+      });
+    } catch (error) {
+      const value = error as Error & {
+        hostFingerprint?: string;
+        hostKeyAccepted?: boolean;
+      };
+      if (value.hostFingerprint && value.hostKeyAccepted === false) {
+        throw new ManagerError(
+          "HOST_KEY_UNKNOWN",
+          "Verify the server host key before continuing",
+          value.hostFingerprint,
+        );
+      }
+      throw error;
+    }
   }
 
   async run(input: RotationInput): Promise<RotationRun> {
@@ -310,22 +405,23 @@ export class RotationService {
     client: Client,
     publicKey: string,
     fingerprint: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    let added = false;
     await this.withAuthorizedKeys(
       client,
       async (content, sftp, authorizedPath) => {
-        const lines = content.split(/\r?\n/).filter(Boolean);
-        if (lines.some((line) => authorizedFingerprint(line) === fingerprint))
-          return;
-        lines.push(publicKey.trim());
+        const merged = mergeAuthorizedKey(content, publicKey, fingerprint);
+        if (!merged.added) return;
         await this.writeAuthorizedKeys(
           sftp,
           authorizedPath,
-          `${lines.join("\n")}\n`,
+          merged.content,
           content,
         );
+        added = merged.added;
       },
     );
+    return added;
   }
 
   private async revokeRemoteKey(

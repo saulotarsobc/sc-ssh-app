@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { appendFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import ssh2, { type Client as SshClient, type ConnectConfig } from "ssh2";
+import ssh2, { type ConnectConfig, type Client as SshClient } from "ssh2";
 import type {
   ConnectionCredentials,
   ConnectionTestResult,
@@ -76,6 +76,7 @@ export class ConnectionService {
     const known = await this.knownFingerprints(host);
     let observedFingerprint = "";
     let acceptedPublic = "";
+    let hostKeyAccepted = false;
     let privateKey: Buffer | undefined;
     if (key?.privateKeyPath) privateKey = await readFile(key.privateKeyPath);
 
@@ -88,7 +89,10 @@ export class ConnectionService {
       const finishReject = (error: Error) => {
         clearTimeout(timer);
         if (observedFingerprint)
-          Object.assign(error, { hostFingerprint: observedFingerprint });
+          Object.assign(error, {
+            hostFingerprint: observedFingerprint,
+            hostKeyAccepted,
+          });
         reject(error);
       };
       client.once("ready", async () => {
@@ -131,8 +135,10 @@ export class ConnectionService {
           if (parsed instanceof Error) return false;
           acceptedPublic = publicKeyFromBlob(parsed.getPublicSSH());
           observedFingerprint = fingerprintPublicKey(acceptedPublic);
-          if (known.has(observedFingerprint)) return true;
-          return credentials.acceptHostFingerprint === observedFingerprint;
+          hostKeyAccepted =
+            known.has(observedFingerprint) ||
+            credentials.acceptHostFingerprint === observedFingerprint;
+          return hostKeyAccepted;
         },
       };
       try {

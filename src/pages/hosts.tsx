@@ -14,10 +14,10 @@ import {
   NumberInput,
   PasswordInput,
   ScrollArea,
+  Select,
   SimpleGrid,
   Skeleton,
   Stack,
-  Switch,
   Tabs,
   Text,
   Textarea,
@@ -33,10 +33,12 @@ import {
   IconDots,
   IconEdit,
   IconHistory,
+  IconKey,
   IconPlayerPlay,
   IconPlus,
   IconRefresh,
   IconRestore,
+  IconRocket,
   IconSearch,
   IconServer,
   IconSortAscending,
@@ -51,7 +53,6 @@ import type {
   HostRecord,
 } from "../../shared/contracts";
 import { PageHeader } from "../components/PageHeader/PageHeader";
-import { ResourcePicker } from "../components/ResourcePicker/ResourcePicker";
 import { useManagerQuery } from "../hooks/useManagerQuery";
 import { action, unwrap } from "../lib/api";
 
@@ -83,21 +84,25 @@ export function HostsPage() {
   const [activeTab, setActiveTab] = useState<string | null>("hosts");
   const [search, setSearch] = useState("");
   const [hostOpened, hostModal] = useDisclosure(false);
+  const [setupOpened, setupModal] = useDisclosure(false);
   const [testHost, setTestHost] = useState<HostRecord>();
+  const [deployHost, setDeployHost] = useState<HostRecord>();
   const [rawConfig, setRawConfig] = useState("");
   const [preview, setPreview] = useState<ConfigPreview>();
   const [backups, setBackups] = useState<ConfigSnapshot[]>([]);
   const [unknownFingerprint, setUnknownFingerprint] = useState("");
   const [trustUnknownHost, setTrustUnknownHost] = useState(false);
+  const [setupFingerprint, setSetupFingerprint] = useState("");
+  const [trustSetupHost, setTrustSetupHost] = useState(false);
+  const [deployFingerprint, setDeployFingerprint] = useState("");
+  const [trustDeployHost, setTrustDeployHost] = useState(false);
   const hostsLoader = useCallback(() => window.sshManager.hosts.list(), []);
-  const keysLoader = useCallback(() => window.sshManager.keys.list(false), []);
   const {
     data: hosts = [],
     loading,
     error,
     reload,
   } = useManagerQuery(hostsLoader);
-  const { data: keys = [] } = useManagerQuery(keysLoader);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredHosts = hosts.filter((host) =>
     [
@@ -142,11 +147,53 @@ export function HostsPage() {
   const credentialsForm = useForm({
     mode: "uncontrolled",
     initialValues: {
-      password: "",
       passphrase: "",
-      rememberPassword: false,
       rememberPassphrase: false,
       acceptHostFingerprint: "",
+    },
+  });
+  const setupForm = useForm({
+    mode: "uncontrolled",
+    initialValues: {
+      alias: "",
+      hostname: "",
+      port: 22,
+      user: "root",
+      password: "",
+      algorithm: "ed25519" as "ed25519" | "rsa",
+      comment: "",
+      passphrase: "",
+      confirmPassphrase: "",
+      allowUnprotected: false,
+    },
+    validate: (values) => ({
+      alias: /^[a-zA-Z0-9._-]{1,64}$/.test(values.alias)
+        ? null
+        : "Use letters, numbers, dots, dashes, or underscores",
+      hostname: /^[a-zA-Z0-9:._-]+$/.test(values.hostname)
+        ? null
+        : "Invalid hostname or IP address",
+      port:
+        values.port >= 1 && values.port <= 65535
+          ? null
+          : "Port must be between 1 and 65535",
+      user: values.user.trim() ? null : "Username is required",
+      password: values.password ? null : "Password is required for setup",
+      confirmPassphrase:
+        values.passphrase === values.confirmPassphrase
+          ? null
+          : "Passphrases do not match",
+      allowUnprotected:
+        !values.passphrase && !values.allowUnprotected
+          ? "Confirm creation without a passphrase"
+          : null,
+    }),
+  });
+  const deployForm = useForm({
+    mode: "uncontrolled",
+    initialValues: { password: "", passphrase: "" },
+    validate: {
+      password: (value) => (value ? null : "Enter the current server password"),
     },
   });
 
@@ -173,8 +220,10 @@ export function HostsPage() {
   }, [loadBackups, loadConfig]);
 
   const openCreate = () => {
-    hostForm.reset();
-    hostModal.open();
+    setupForm.reset();
+    setSetupFingerprint("");
+    setTrustSetupHost(false);
+    setupModal.open();
   };
   const openEdit = (host: HostRecord) => {
     hostForm.setValues({
@@ -203,7 +252,7 @@ export function HostsPage() {
         port: Number(values.port),
         user: values.user,
         keyId: values.keyId,
-        identitiesOnly: values.identitiesOnly,
+        identitiesOnly: true,
         serverAliveInterval:
           values.serverAliveInterval === ""
             ? undefined
@@ -216,13 +265,62 @@ export function HostsPage() {
     await Promise.all([reload(), loadConfig()]);
   });
 
+  const submitSetup = setupForm.onSubmit(async (values) => {
+    const result = await window.sshManager.hosts.setup({
+      alias: values.alias,
+      hostname: values.hostname,
+      port: Number(values.port),
+      user: values.user,
+      password: { value: values.password, remember: false },
+      algorithm: values.algorithm,
+      comment: values.comment,
+      passphrase: values.passphrase
+        ? { value: values.passphrase, remember: false }
+        : undefined,
+      allowUnprotected: values.allowUnprotected,
+      acceptHostFingerprint: trustSetupHost ? setupFingerprint : undefined,
+    });
+    if (!result.ok && result.error.code === "HOST_KEY_UNKNOWN") {
+      setSetupFingerprint(result.error.details ?? "");
+      setTrustSetupHost(false);
+      return;
+    }
+    await action(
+      Promise.resolve(result),
+      `Passwordless access to ${values.alias} is ready`,
+    );
+    setupForm.reset();
+    setupModal.close();
+    await Promise.all([reload(), loadConfig()]);
+  });
+
+  const submitDeploy = deployForm.onSubmit(async (values) => {
+    if (!deployHost) return;
+    const result = await window.sshManager.hosts.installKey(deployHost.id, {
+      password: { value: values.password, remember: false },
+      passphrase: values.passphrase
+        ? { value: values.passphrase, remember: false }
+        : undefined,
+      acceptHostFingerprint: trustDeployHost ? deployFingerprint : undefined,
+    });
+    if (!result.ok && result.error.code === "HOST_KEY_UNKNOWN") {
+      setDeployFingerprint(result.error.details ?? "");
+      setTrustDeployHost(false);
+      return;
+    }
+    await action(
+      Promise.resolve(result),
+      `Passwordless access to ${deployHost.alias} is ready`,
+    );
+    deployForm.reset();
+    setDeployHost(undefined);
+    await Promise.all([reload(), loadConfig()]);
+  });
+
   const runTest = credentialsForm.onSubmit(async (values) => {
     if (!testHost) return;
     const result = await action(
       window.sshManager.hosts.test(testHost.id, {
-        password: values.password
-          ? { value: values.password, remember: values.rememberPassword }
-          : undefined,
         passphrase: values.passphrase
           ? { value: values.passphrase, remember: values.rememberPassphrase }
           : undefined,
@@ -256,7 +354,7 @@ export function HostsPage() {
         description="Manage connection profiles without losing the semantics of your OpenSSH config."
         actions={
           <Button leftSection={<IconPlus size={18} />} onClick={openCreate}>
-            Add host
+            Set up server
           </Button>
         }
       />
@@ -332,6 +430,18 @@ export function HostsPage() {
                           }}
                         >
                           Test connection
+                        </Menu.Item>
+                        <Menu.Item
+                          leftSection={<IconKey size={16} />}
+                          disabled={!host.keyId}
+                          onClick={() => {
+                            deployForm.reset();
+                            setDeployFingerprint("");
+                            setTrustDeployHost(false);
+                            setDeployHost(host);
+                          }}
+                        >
+                          Enable passwordless access
                         </Menu.Item>
                         <Menu.Item
                           leftSection={<IconTerminal2 size={16} />}
@@ -413,7 +523,7 @@ export function HostsPage() {
                     : "Add a guided host or edit your OpenSSH config directly."}
                 </Text>
                 <Button onClick={search ? () => setSearch("") : openCreate}>
-                  {search ? "Clear search" : "Add host"}
+                  {search ? "Clear search" : "Set up server"}
                 </Button>
               </Stack>
             </Card>
@@ -514,6 +624,178 @@ export function HostsPage() {
       </Tabs>
 
       <Modal
+        opened={setupOpened}
+        onClose={() => {
+          setSetupFingerprint("");
+          setTrustSetupHost(false);
+          setupModal.close();
+        }}
+        title="Set up passwordless SSH"
+        size="lg"
+      >
+        <form onSubmit={submitSetup}>
+          <Stack>
+            <Alert color="teal" icon={<IconRocket size={18} />}>
+              One server, one key. The app generates the key, installs it,
+              writes SSH config, and verifies <Code>ssh alias</Code>.
+            </Alert>
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <TextInput
+                key={setupForm.key("alias")}
+                label="Alias"
+                placeholder="production"
+                {...setupForm.getInputProps("alias")}
+              />
+              <TextInput
+                key={setupForm.key("hostname")}
+                label="Hostname or IP"
+                placeholder="server.example.com"
+                {...setupForm.getInputProps("hostname")}
+              />
+              <TextInput
+                key={setupForm.key("user")}
+                label="Username"
+                {...setupForm.getInputProps("user")}
+              />
+              <NumberInput
+                key={setupForm.key("port")}
+                label="Port"
+                min={1}
+                max={65535}
+                {...setupForm.getInputProps("port")}
+              />
+            </SimpleGrid>
+            <PasswordInput
+              key={setupForm.key("password")}
+              label="Current server password"
+              description="Used once to install the public key. It is not stored."
+              {...setupForm.getInputProps("password")}
+            />
+            <Select
+              key={setupForm.key("algorithm")}
+              label="Key algorithm"
+              data={[
+                { value: "ed25519", label: "ED25519 — recommended" },
+                { value: "rsa", label: "RSA 4096 — legacy compatibility" },
+              ]}
+              {...setupForm.getInputProps("algorithm")}
+            />
+            <TextInput
+              key={setupForm.key("comment")}
+              label="Key comment"
+              placeholder="Defaults to user@host"
+              {...setupForm.getInputProps("comment")}
+            />
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <PasswordInput
+                key={setupForm.key("passphrase")}
+                label="Key passphrase"
+                {...setupForm.getInputProps("passphrase")}
+              />
+              <PasswordInput
+                key={setupForm.key("confirmPassphrase")}
+                label="Confirm key passphrase"
+                {...setupForm.getInputProps("confirmPassphrase")}
+              />
+            </SimpleGrid>
+            <Checkbox
+              key={setupForm.key("allowUnprotected")}
+              color="yellow"
+              label="I understand that an empty passphrase leaves the private key unprotected"
+              {...setupForm.getInputProps("allowUnprotected", {
+                type: "checkbox",
+              })}
+            />
+            {setupFingerprint && (
+              <Alert color="yellow" title="Verify this server fingerprint">
+                <Code>{setupFingerprint}</Code>
+                <Checkbox
+                  mt="sm"
+                  checked={trustSetupHost}
+                  label="I verified this fingerprint and trust this server"
+                  onChange={(event) =>
+                    setTrustSetupHost(event.currentTarget.checked)
+                  }
+                />
+              </Alert>
+            )}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={setupModal.close}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                loading={setupForm.submitting}
+                disabled={Boolean(setupFingerprint) && !trustSetupHost}
+                leftSection={<IconRocket size={17} />}
+              >
+                Set up server
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+
+      <Modal
+        opened={Boolean(deployHost)}
+        onClose={() => {
+          setDeployFingerprint("");
+          setTrustDeployHost(false);
+          setDeployHost(undefined);
+        }}
+        title={`Enable passwordless access to ${deployHost?.alias ?? "host"}`}
+      >
+        <form onSubmit={submitDeploy}>
+          <Stack>
+            <Text c="dimmed" size="sm">
+              The configured public key will be added to the server and tested
+              before this operation succeeds.
+            </Text>
+            <PasswordInput
+              key={deployForm.key("password")}
+              label="Current server password"
+              description="Used once and never stored."
+              {...deployForm.getInputProps("password")}
+            />
+            {deployFingerprint && (
+              <Alert color="yellow" title="Verify this server fingerprint">
+                <Code>{deployFingerprint}</Code>
+                <Checkbox
+                  mt="sm"
+                  checked={trustDeployHost}
+                  label="I verified this fingerprint and trust this server"
+                  onChange={(event) =>
+                    setTrustDeployHost(event.currentTarget.checked)
+                  }
+                />
+              </Alert>
+            )}
+            <PasswordInput
+              key={deployForm.key("passphrase")}
+              label="Key passphrase"
+              description="Leave empty if this key has no passphrase."
+              {...deployForm.getInputProps("passphrase")}
+            />
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={() => setDeployHost(undefined)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                loading={deployForm.submitting}
+                disabled={Boolean(deployFingerprint) && !trustDeployHost}
+              >
+                Enable access
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+
+      <Modal
         opened={hostOpened}
         onClose={hostModal.close}
         title={hostForm.getValues().id ? "Edit host" : "Add host"}
@@ -549,37 +831,17 @@ export function HostsPage() {
                 {...hostForm.getInputProps("port")}
               />
             </SimpleGrid>
-            <ResourcePicker
-              label="SSH key"
-              placeholder="Search indexed keys"
-              value={hostForm.getValues().keyId || null}
-              onChange={(value) => hostForm.setFieldValue("keyId", value ?? "")}
-              error={hostForm.errors.keyId as string | undefined}
-              options={keys
-                .filter((key) => key.status === "active")
-                .map((key) => ({
-                  value: key.id,
-                  label: key.name,
-                  description: key.fingerprint,
-                  group: key.algorithm,
-                }))}
+            <Alert color="teal">
+              This host keeps its dedicated key. Editing connection details does
+              not replace the identity.
+            </Alert>
+            <NumberInput
+              key={hostForm.key("serverAliveInterval")}
+              label="Keepalive interval"
+              suffix=" s"
+              min={0}
+              {...hostForm.getInputProps("serverAliveInterval")}
             />
-            <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              <Switch
-                key={hostForm.key("identitiesOnly")}
-                label="Use only this identity"
-                {...hostForm.getInputProps("identitiesOnly", {
-                  type: "checkbox",
-                })}
-              />
-              <NumberInput
-                key={hostForm.key("serverAliveInterval")}
-                label="Keepalive interval"
-                suffix=" s"
-                min={0}
-                {...hostForm.getInputProps("serverAliveInterval")}
-              />
-            </SimpleGrid>
             <Textarea
               key={hostForm.key("additionalDirectives")}
               label="Additional directives"
@@ -621,18 +883,6 @@ export function HostsPage() {
               key={credentialsForm.key("rememberPassphrase")}
               label="Remember key passphrase"
               {...credentialsForm.getInputProps("rememberPassphrase", {
-                type: "checkbox",
-              })}
-            />
-            <PasswordInput
-              key={credentialsForm.key("password")}
-              label="Server password fallback"
-              {...credentialsForm.getInputProps("password")}
-            />
-            <Checkbox
-              key={credentialsForm.key("rememberPassword")}
-              label="Remember server password"
-              {...credentialsForm.getInputProps("rememberPassword", {
                 type: "checkbox",
               })}
             />

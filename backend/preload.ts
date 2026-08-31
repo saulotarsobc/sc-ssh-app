@@ -25,9 +25,12 @@ const api: SshManagerApi = {
   },
   hosts: {
     list: () => invoke("manager:hosts:list"),
+    setup: (input) => invoke("manager:hosts:setup", input),
     save: (input) => invoke("manager:hosts:save", input),
     remove: (id) => invoke("manager:hosts:remove", id),
     test: (id, credentials) => invoke("manager:hosts:test", id, credentials),
+    installKey: (id, credentials) =>
+      invoke("manager:hosts:install-key", id, credentials),
     openTerminal: (id) => invoke("manager:hosts:open-terminal", id),
   },
   config: {

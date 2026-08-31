@@ -1,8 +1,10 @@
 import { z } from "zod";
 
-const secretSchema = z
-  .object({ value: z.string().max(4096), remember: z.boolean() })
-  .optional();
+const requiredSecretSchema = z.object({
+  value: z.string().max(4096),
+  remember: z.boolean(),
+});
+const secretSchema = requiredSecretSchema.optional();
 
 export const keyCreateSchema = z
   .object({
@@ -73,6 +75,33 @@ export const hostInputSchema = z.object({
   serverAliveInterval: z.number().int().min(0).max(86400).optional(),
   additionalDirectives: z.record(z.string(), z.string().max(4096)),
 });
+
+export const serverSetupSchema = z
+  .object({
+    alias: z.string().regex(/^[a-zA-Z0-9._-]{1,64}$/),
+    hostname: z
+      .string()
+      .regex(/^[a-zA-Z0-9:._-]+$/)
+      .max(253),
+    port: z.number().int().min(1).max(65535),
+    user: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^[^\s@]+$/),
+    password: requiredSecretSchema.extend({
+      value: z.string().min(1).max(4096),
+    }),
+    algorithm: z.enum(["ed25519", "rsa"]),
+    comment: z.string().max(254),
+    passphrase: secretSchema,
+    allowUnprotected: z.boolean(),
+    acceptHostFingerprint: z.string().max(256).optional(),
+  })
+  .refine((value) => value.passphrase?.value || value.allowUnprotected, {
+    message: "Confirm creation of an unprotected private key",
+  });
 
 export const connectionCredentialsSchema = z
   .object({

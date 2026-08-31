@@ -12,12 +12,15 @@ import type {
   KeyUpdateInput,
   OperationProgress,
   RotationInput,
+  ServerSetupInput,
+  ServerSetupResult,
   SshKeyRecord,
 } from "../../shared/contracts";
 import { AgentService } from "./agent";
 import { ConfigService } from "./config";
 import { ConnectionService } from "./connection";
 import { DiagnosticService } from "./diagnostics";
+import { ManagerError } from "./errors";
 import { KeyService } from "./keys";
 import { RotationService } from "./rotation";
 import { MetadataStore } from "./storage";
@@ -127,6 +130,92 @@ export class SshManager {
     return { ...saved, keyId: key?.id };
   }
 
+  async setupHost(input: ServerSetupInput): Promise<ServerSetupResult> {
+    const duplicate = (await this.config.hosts()).some(
+      (host) => host.alias.toLowerCase() === input.alias.toLowerCase(),
+    );
+    if (duplicate)
+      throw new Error(`Host alias '${input.alias}' already exists`);
+
+    const provisionalHost: HostRecord = {
+      id: input.alias.toLowerCase(),
+      alias: input.alias,
+      hostname: input.hostname,
+      port: input.port,
+      user: input.user,
+      identitiesOnly: true,
+      serverAliveInterval: 60,
+      additionalDirectives: {},
+      raw: "",
+      lineStart: 0,
+      lineEnd: 0,
+      simple: true,
+      issues: [],
+    };
+    const preflight = await this.connections.test(provisionalHost, undefined, {
+      password: { value: input.password.value, remember: false },
+      acceptHostFingerprint: input.acceptHostFingerprint,
+    });
+    if (!preflight.success) {
+      if (preflight.category === "host-key" && preflight.hostFingerprint) {
+        throw new ManagerError(
+          "HOST_KEY_UNKNOWN",
+          "Verify the server host key before continuing",
+          preflight.hostFingerprint,
+        );
+      }
+      throw new ManagerError(
+        "AUTHENTICATION_FAILED",
+        `Server login failed: ${preflight.message}`,
+      );
+    }
+
+    let key: SshKeyRecord | undefined;
+    let configSaved = false;
+    try {
+      key = await this.keys.create({
+        name: input.alias,
+        algorithm: input.algorithm,
+        comment: input.comment || `${input.user}@${input.hostname}`,
+        passphrase: input.passphrase,
+        tags: [input.alias],
+        rotationIntervalDays: this.store.settings.rotationIntervalDays,
+        rotationReminderDays: this.store.settings.rotationReminderDays,
+        allowUnprotected: input.allowUnprotected,
+      });
+      const saved = await this.config.saveHost(
+        {
+          alias: input.alias,
+          hostname: input.hostname,
+          port: input.port,
+          user: input.user,
+          keyId: key.id,
+          identitiesOnly: true,
+          serverAliveInterval: 60,
+          additionalDirectives: {},
+        },
+        key.privateKeyPath,
+      );
+      configSaved = true;
+      const host = { ...saved, keyId: key.id };
+      const connection = await this.rotations.installExistingKey(host, key, {
+        password: { value: input.password.value, remember: false },
+        passphrase: input.passphrase,
+        acceptHostFingerprint: input.acceptHostFingerprint,
+      });
+      this.onChanged();
+      return { host, key, connection };
+    } catch (error) {
+      if (configSaved) await this.config.removeHost(input.alias);
+      if (key) {
+        await this.keys.archive(key.id);
+        await this.keys.deletePermanently(key.id);
+      }
+      this.onChanged();
+      throw error;
+    }
+  }
+
   async removeHost(id: string): Promise<void> {
     await this.config.removeHost(id);
     await this.store.audit("host.deleted", "success", id, `Removed host ${id}`);
@@ -138,9 +227,14 @@ export class SshManager {
     if (!host) throw new Error("Host not found");
     const key = host.keyId ? await this.keys.get(host.keyId, false) : undefined;
     const resolved = await this.resolveCredentials(host, key, credentials);
+    resolved.password = undefined;
     const result = await this.connections.test(host, key, resolved);
     if (result.success) {
-      await this.rememberCredentials(host, key, credentials);
+      if (key && credentials.passphrase?.remember)
+        await this.vault.remember(
+          `key:${key.id}`,
+          credentials.passphrase.value,
+        );
       await this.store.audit(
         "host.tested",
         "success",
@@ -155,6 +249,37 @@ export class SshManager {
         result.message,
       );
     }
+    return result;
+  }
+
+  async installHostKey(id: string, credentials: ConnectionCredentials) {
+    const host = (await this.hosts()).find((item) => item.id === id);
+    if (!host) throw new Error("Host not found");
+    const key = host.keyId ? await this.keys.get(host.keyId, false) : undefined;
+    if (!key?.publicKey || !key.privateKeyPath)
+      throw new Error("Host does not reference a usable SSH key pair");
+    const result = await this.rotations.installExistingKey(
+      host,
+      key,
+      credentials,
+    );
+    if (!host.identitiesOnly) {
+      await this.config.saveHost(
+        {
+          id: host.id,
+          alias: host.alias,
+          hostname: host.hostname,
+          port: host.port,
+          user: host.user,
+          keyId: key.id,
+          identitiesOnly: true,
+          serverAliveInterval: host.serverAliveInterval,
+          additionalDirectives: host.additionalDirectives,
+        },
+        key.privateKeyPath,
+      );
+    }
+    this.onChanged();
     return result;
   }
 
@@ -240,17 +365,6 @@ export class SshManager {
             remember: true,
           },
     };
-  }
-
-  private async rememberCredentials(
-    host: HostRecord,
-    key: SshKeyRecord | undefined,
-    credentials: ConnectionCredentials,
-  ): Promise<void> {
-    if (credentials.password?.remember)
-      await this.vault.remember(`host:${host.id}`, credentials.password.value);
-    if (key && credentials.passphrase?.remember)
-      await this.vault.remember(`key:${key.id}`, credentials.passphrase.value);
   }
 
   private expandIdentity(value: string | undefined): string | undefined {
