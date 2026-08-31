@@ -37,6 +37,7 @@ import {
   IconPlus,
   IconRefresh,
   IconRestore,
+  IconSearch,
   IconServer,
   IconSortAscending,
   IconTerminal2,
@@ -80,6 +81,7 @@ const directivesFromText = (value: string): Record<string, string> =>
 
 export function HostsPage() {
   const [activeTab, setActiveTab] = useState<string | null>("hosts");
+  const [search, setSearch] = useState("");
   const [hostOpened, hostModal] = useDisclosure(false);
   const [testHost, setTestHost] = useState<HostRecord>();
   const [rawConfig, setRawConfig] = useState("");
@@ -96,6 +98,19 @@ export function HostsPage() {
     reload,
   } = useManagerQuery(hostsLoader);
   const { data: keys = [] } = useManagerQuery(keysLoader);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredHosts = hosts.filter((host) =>
+    [
+      host.alias,
+      host.hostname,
+      host.user,
+      host.identityFile ?? "",
+      ...host.issues,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedSearch),
+  );
 
   const hostForm = useForm<HostValues>({
     mode: "uncontrolled",
@@ -264,15 +279,24 @@ export function HostsPage() {
         </Tabs.List>
 
         <Tabs.Panel value="hosts">
+          <TextInput
+            mb="lg"
+            maw={460}
+            leftSection={<IconSearch size={17} />}
+            placeholder="Search by alias, address, user, or key path"
+            aria-label="Search hosts"
+            value={search}
+            onChange={(event) => setSearch(event.currentTarget.value)}
+          />
           {loading ? (
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               {Array.from({ length: 4 }, (_, index) => (
                 <Skeleton key={index} h={190} />
               ))}
             </SimpleGrid>
-          ) : hosts.length ? (
+          ) : filteredHosts.length ? (
             <SimpleGrid cols={{ base: 1, md: 2 }}>
-              {hosts.map((host) => (
+              {filteredHosts.map((host) => (
                 <Card key={host.id} withBorder padding="lg">
                   <Group justify="space-between" align="flex-start">
                     <Group>
@@ -375,12 +399,22 @@ export function HostsPage() {
           ) : (
             <Card withBorder p="xl">
               <Stack align="center">
-                <IconBinaryTree size={42} />
-                <Title order={3}>No host profiles yet</Title>
+                {search ? (
+                  <IconSearch size={42} />
+                ) : (
+                  <IconBinaryTree size={42} />
+                )}
+                <Title order={3}>
+                  {search ? "No matching hosts" : "No host profiles yet"}
+                </Title>
                 <Text c="dimmed">
-                  Add a guided host or edit your OpenSSH config directly.
+                  {search
+                    ? `No hosts match “${search}”.`
+                    : "Add a guided host or edit your OpenSSH config directly."}
                 </Text>
-                <Button onClick={openCreate}>Add host</Button>
+                <Button onClick={search ? () => setSearch("") : openCreate}>
+                  {search ? "Clear search" : "Add host"}
+                </Button>
               </Stack>
             </Card>
           )}

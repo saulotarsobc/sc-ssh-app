@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type {
   AgentIdentity,
@@ -7,6 +7,7 @@ import type {
 } from "../../shared/contracts";
 import { ManagerError } from "./errors";
 import type { MetadataStore } from "./storage";
+import { openInTerminal } from "./terminal";
 
 const execFileAsync = promisify(execFile);
 
@@ -63,13 +64,15 @@ export class AgentService {
     if (!key.privateKeyPath)
       throw new ManagerError("NOT_FOUND", "Private key file is unavailable");
     if (key.encrypted) {
-      this.openInteractive(["ssh-add", key.privateKeyPath]);
-      return;
+      await openInTerminal(this.store.settings.terminal, "ssh-add", [
+        key.privateKeyPath,
+      ]);
+    } else {
+      await execFileAsync("ssh-add", [key.privateKeyPath], {
+        windowsHide: true,
+        timeout: 10_000,
+      });
     }
-    await execFileAsync("ssh-add", [key.privateKeyPath], {
-      windowsHide: true,
-      timeout: 10_000,
-    });
     await this.store.audit(
       "agent.updated",
       "success",
@@ -97,39 +100,5 @@ export class AgentService {
       fingerprint,
       `Removed ${key.name} from SSH agent`,
     );
-  }
-
-  private openInteractive(args: string[]): void {
-    let command: string;
-    let commandArgs: string[];
-    if (process.platform === "win32") {
-      command =
-        this.store.settings.terminal === "windows-terminal" ||
-        this.store.settings.terminal === "auto"
-          ? "wt.exe"
-          : "powershell.exe";
-      commandArgs =
-        command === "wt.exe" ? args : ["-NoExit", "-Command", ...args];
-    } else if (process.platform === "darwin") {
-      command = "osascript";
-      const escaped = args
-        .map((value) => `'${value.replace(/'/g, "'\\''")}'`)
-        .join(" ");
-      commandArgs = [
-        "-e",
-        `tell application "Terminal" to do script "${escaped}"`,
-        "-e",
-        'tell application "Terminal" to activate',
-      ];
-    } else {
-      command = "x-terminal-emulator";
-      commandArgs = ["-e", ...args];
-    }
-    const child = spawn(command, commandArgs, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.unref();
   }
 }

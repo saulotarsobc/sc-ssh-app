@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { appendFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -11,6 +11,7 @@ import type {
 } from "../../shared/contracts";
 import { fingerprintPublicKey, publicKeyFromBlob } from "./keys";
 import type { MetadataStore } from "./storage";
+import { openInTerminal } from "./terminal";
 
 const execFileAsync = promisify(execFile);
 const { Client, utils } = ssh2;
@@ -143,37 +144,7 @@ export class ConnectionService {
   }
 
   async openTerminal(host: HostRecord): Promise<void> {
-    const args = ["ssh", host.alias];
-    let command: string;
-    let commandArgs: string[];
-    if (process.platform === "win32") {
-      command =
-        this.store.settings.terminal === "windows-terminal" ||
-        this.store.settings.terminal === "auto"
-          ? "wt.exe"
-          : "powershell.exe";
-      commandArgs =
-        command === "wt.exe"
-          ? args
-          : ["-NoExit", "-Command", "ssh", host.alias];
-    } else if (process.platform === "darwin") {
-      command = "osascript";
-      commandArgs = [
-        "-e",
-        `tell application "Terminal" to do script "ssh ${host.alias}"`,
-        "-e",
-        'tell application "Terminal" to activate',
-      ];
-    } else {
-      command = "x-terminal-emulator";
-      commandArgs = ["-e", ...args];
-    }
-    const child = spawn(command, commandArgs, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.unref();
+    await openInTerminal(this.store.settings.terminal, "ssh", [host.alias]);
   }
 
   private async knownFingerprints(host: HostRecord): Promise<Set<string>> {
