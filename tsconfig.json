@@ -22,7 +22,7 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src", "backend"],
+  "include": ["src", "backend", "shared", "tests"],
   "references": [
     {
       "path": "./tsconfig.node.json"

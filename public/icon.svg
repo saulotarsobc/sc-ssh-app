@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="SC SSH Keys Manager">
+  <defs>
+    <linearGradient id="g" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="#111827"/>
+  <path d="M128 27 211 58v61c0 54-33 91-83 111-50-20-83-57-83-111V58l83-31Z" fill="url(#g)"/>
+  <circle cx="108" cy="112" r="27" fill="none" stroke="#ecfeff" stroke-width="15"/>
+  <path d="m128 130 47 47m-13-13 16-16m-32 0 16-16" fill="none" stroke="#ecfeff" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+</svg>

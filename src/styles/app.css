@@ -1,0 +1,29 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 90% -10%,
+      rgba(18, 184, 134, 0.08),
+      transparent 30rem
+    ),
+    var(--mantine-color-body);
+}
+
+::selection {
+  color: white;
+  background: rgba(18, 184, 134, 0.45);
+}
+
+.mantine-AppShell-main {
+  min-height: 100vh;
+}
+
+.cm-editor {
+  font-size: 13px;
+}

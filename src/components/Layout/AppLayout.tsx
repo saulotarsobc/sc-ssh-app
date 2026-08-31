@@ -12,69 +12,47 @@ import {
   ScrollArea,
   Stack,
   Text,
+  ThemeIcon,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
+  IconActivityHeartbeat,
   IconBrandGithub,
-  IconDeviceDesktopAnalytics,
-  IconHome,
-  IconLayoutDashboard,
-  IconMessageCircle,
-  IconPhoto,
-  IconSearch,
+  IconKey,
+  IconLockSquareRounded,
+  IconRefresh,
+  IconServer,
   IconSettings,
-  IconSparkles,
-  IconUser,
+  IconShieldCheck,
 } from "@tabler/icons-react";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-interface AppLayoutProps {
-  children: ReactNode;
-}
-
-const navigationSections = [
-  {
-    title: "Overview",
-    links: [
-      { icon: IconHome, label: "Home", path: "/" },
-      { icon: IconLayoutDashboard, label: "Dashboard", path: "/dashboard" },
-      { icon: IconSparkles, label: "Showcase", path: "/showcase" },
-      { icon: IconDeviceDesktopAnalytics, label: "System", path: "/system" },
-    ],
-  },
-  {
-    title: "App examples",
-    links: [
-      { icon: IconPhoto, label: "Gallery", path: "/gallery" },
-      { icon: IconMessageCircle, label: "Messages", path: "/messages" },
-      { icon: IconSearch, label: "Search", path: "/search" },
-      { icon: IconUser, label: "Profile", path: "/profile" },
-      { icon: IconSettings, label: "Settings", path: "/settings" },
-    ],
-  },
+const links = [
+  { icon: IconShieldCheck, label: "Overview", path: "/" },
+  { icon: IconKey, label: "SSH keys", path: "/keys" },
+  { icon: IconServer, label: "Hosts & config", path: "/hosts" },
+  { icon: IconRefresh, label: "Rotations", path: "/rotations" },
+  { icon: IconActivityHeartbeat, label: "Activity", path: "/activity" },
+  { icon: IconSettings, label: "Settings", path: "/settings" },
 ];
 
-export function AppLayout({ children }: AppLayoutProps) {
-  const [opened, { toggle }] = useDisclosure();
+export function AppLayout({ children }: { children: ReactNode }) {
+  const [opened, { toggle, close }] = useDisclosure();
   const navigate = useNavigate();
   const location = useLocation();
-  const curretYear = new Date().getFullYear();
   const updateStatus = useUpdateStatus();
-
   return (
     <AppShell
-      header={{ height: 60 }}
-      navbar={{ width: 300, breakpoint: "sm", collapsed: { mobile: !opened } }}
-      // The footer only exists while an update is in progress; `collapsed` is
-      // what gives the height back to the content the rest of the time.
+      header={{ height: 68 }}
+      navbar={{ width: 270, breakpoint: "sm", collapsed: { mobile: !opened } }}
       footer={{ height: 48, collapsed: !updateStatus }}
-      padding="md"
+      padding={0}
     >
-      {/* Header */}
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
+        <Group h="100%" px="lg" justify="space-between">
           <Group>
             <Burger
               opened={opened}
@@ -82,73 +60,75 @@ export function AppLayout({ children }: AppLayoutProps) {
               hiddenFrom="sm"
               size="sm"
             />
-            <Title order={3}>Electron + React + Vite + Mantine</Title>
+            <ThemeIcon
+              variant="gradient"
+              gradient={{ from: "teal", to: "cyan" }}
+              size="lg"
+            >
+              <IconLockSquareRounded size={22} />
+            </ThemeIcon>
+            <div>
+              <Title order={3}>SC - SSH Keys Manager</Title>
+              <Text size="xs" c="dimmed">
+                Local-first identity security
+              </Text>
+            </div>
           </Group>
-
           <Group>
             <ColorSchemeToggle />
-            <ActionIcon
-              variant="light"
-              size="lg"
-              component="a"
-              href="https://github.com/saulotarsobc"
-              target="_blank"
-            >
-              <IconBrandGithub size={20} />
-            </ActionIcon>
+            <Tooltip label="GitHub repository">
+              <ActionIcon
+                variant="subtle"
+                size="lg"
+                component="a"
+                href="https://github.com/saulotarsobc/sc-ssh-app"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <IconBrandGithub size={20} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>
-
-      {/* Navbar */}
       <AppShell.Navbar p="md">
         <AppShell.Section grow component={ScrollArea}>
-          {navigationSections.map((section, sectionIndex) => (
-            <Box key={section.title} mb="md">
-              <Text size="xs" fw={500} c="dimmed" tt="uppercase" mb="xs">
-                {section.title}
-              </Text>
-              <Stack gap="xs">
-                {section.links.map((link) => (
-                  <NavLink
-                    key={link.path}
-                    href="#"
-                    label={link.label}
-                    leftSection={<link.icon size={20} stroke={1.5} />}
-                    active={location.pathname === link.path}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      navigate(link.path);
-                      if (opened) toggle(); // Close mobile menu after navigation
-                    }}
-                    variant="filled"
-                  />
-                ))}
-              </Stack>
-              {sectionIndex < navigationSections.length - 1 && (
-                <Divider mt="md" />
-              )}
-            </Box>
-          ))}
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase" px="sm" mb="sm">
+            Workspace
+          </Text>
+          <Stack gap={4}>
+            {links.map((link) => (
+              <NavLink
+                key={link.path}
+                label={link.label}
+                leftSection={<link.icon size={19} />}
+                active={location.pathname === link.path}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(link.path);
+                  close();
+                }}
+                variant="light"
+              />
+            ))}
+          </Stack>
         </AppShell.Section>
-
         <AppShell.Section>
           <Divider mb="md" />
-          <Box p="xs" style={{ textAlign: "center" }}>
-            <Text size="xs" c="dimmed">
-              My Boilerplate
-            </Text>
-            <Text size="xs" c="dimmed">
-              © {curretYear} Saulo Costa
+          <Box px="sm">
+            <Group gap="xs">
+              <span className="pulse-dot" />
+              <Text size="xs" c="dimmed">
+                No cloud. No telemetry.
+              </Text>
+            </Group>
+            <Text size="xs" c="dimmed" mt={4}>
+              © {new Date().getFullYear()} Saulo Costa
             </Text>
           </Box>
         </AppShell.Section>
       </AppShell.Navbar>
-
-      {/* Main Content */}
       <AppShell.Main>{children}</AppShell.Main>
-
-      {/* Auto-update */}
       {updateStatus && (
         <AppShell.Footer>
           <UpdateBanner status={updateStatus} />

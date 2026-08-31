@@ -1,5 +1,4 @@
-import type { UpdateStatus } from "@/types/update";
-import type { IpcRendererEvent } from "electron";
+import type { UpdateStatus } from "../../shared/contracts";
 import { useEffect, useState } from "react";
 
 /**
@@ -15,18 +14,10 @@ export function useUpdateStatus(): UpdateStatus | null {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
 
   useEffect(() => {
-    if (typeof window.ipcRenderer === "undefined") return;
-
-    // The bridge's `on` is generic (`...args: unknown[]`) because it forwards
-    // every IPC channel, not just this one — the cast is what recovers the
-    // shape `backend/utils/updater` actually sends.
-    const listener = (_event: IpcRendererEvent, ...args: unknown[]) => {
-      const next = args[0] as UpdateStatus;
+    if (typeof window.sshManager === "undefined") return;
+    return window.sshManager.updates.onStatus((next) => {
       setStatus(next.state === "error" ? null : next);
-    };
-
-    window.ipcRenderer.on("update:status", listener);
-    return () => window.ipcRenderer.off("update:status", listener);
+    });
   }, []);
 
   return status;

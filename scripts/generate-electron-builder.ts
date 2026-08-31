@@ -22,7 +22,7 @@ if (!repoMatch) {
 const [, owner, repo] = repoMatch;
 
 const config: Configuration = {
-  appId: "br.com.saulotarsobc.electron-with-vite",
+  appId: "br.com.saulotarsobc.sshkeysmanager",
   productName: displayName,
   files: ["dist/**/*"],
   // Without this block electron-builder never writes the update manifest
@@ -41,7 +41,9 @@ const config: Configuration = {
   directories: {
     output: "out",
   },
+  asar: true,
   win: {
+    icon: "public/icon.ico",
     target: ["nsis"],
     artifactName: "${name}-${version}-windows-${arch}.${ext}",
   },
@@ -51,11 +53,13 @@ const config: Configuration = {
     oneClick: false,
   },
   mac: {
+    icon: "public/icon.png",
     target: "dmg",
     signIgnore: null,
     artifactName: "${productName}-Setup-${version}.${ext}",
   },
   linux: {
+    icon: "public/icon.png",
     target: ["AppImage", "deb"],
     artifactName: "${name}-${version}-linux-${arch}.${ext}",
   },

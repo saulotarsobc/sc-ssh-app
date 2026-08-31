@@ -1,4 +1,4 @@
-import type { UpdateStatus } from "@/types/update";
+import type { UpdateStatus } from "../../../shared/contracts";
 import { Button, Group, Progress, Text } from "@mantine/core";
 import { IconDownload, IconRefreshAlert } from "@tabler/icons-react";
 
@@ -42,10 +42,7 @@ export function UpdateBanner({ status }: UpdateBannerProps) {
         <>
           <IconRefreshAlert size={18} stroke={1.5} />
           <Text size="sm">Version {status.version} is ready to install.</Text>
-          <Button
-            size="xs"
-            onClick={() => window.ipcRenderer.invoke("update:install")}
-          >
+          <Button size="xs" onClick={() => window.sshManager.updates.install()}>
             Restart and install
           </Button>
         </>

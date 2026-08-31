@@ -1,136 +1,73 @@
-# Electron boilerplate
+# SC - SSH Keys Manager
 
-> Electron + React + Vite + Mantine
+A local-first desktop application for managing SSH identities, OpenSSH host configuration, key rotation, and `ssh-agent` from one place.
 
----
+The renderer never receives filesystem, process, or Electron access. All privileged operations run in Electron's main process through a narrow, validated `window.sshManager` API.
 
-<div align="center">
-  <img alt="Stars" src="https://img.shields.io/github/stars/saulotarsobc/sc-electron-boilerplate.svg">
-  <img alt="Forks" src="https://img.shields.io/github/forks/saulotarsobc/sc-electron-boilerplate.svg">
-</div>
+## Features
 
-<div align="center">
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg">
-  <img alt="Version" src="https://img.shields.io/github/v/release/saulotarsobc/sc-electron-boilerplate.svg">
-  <img alt="Contributors" src="https://img.shields.io/github/contributors/saulotarsobc/sc-electron-boilerplate.svg">
-  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/saulotarsobc/sc-electron-boilerplate.svg">
-</div>
+- Inventory and health checks for keys in `~/.ssh`
+- ED25519 and RSA 4096 key creation, private-key import, metadata, tags, archive, restore, and permanent deletion
+- Public-key copy/export without exposing private material
+- Guided host CRUD plus a raw OpenSSH config editor with validation, diff review, atomic writes, and backups
+- Conservative alphabetical organization that preserves order-sensitive global directives, wildcards, `Include`, and `Match` barriers
+- Assisted remote rotation with preflight, `authorized_keys` backup, new-key test, rollback, revocation, and audit history
+- Host-key verification against `known_hosts`
+- `ssh-agent` inventory, add, remove, and interactive `ssh-add` for protected identities
+- Optional OS-protected secret persistence through Electron `safeStorage`
+- Diagnostics, activity history, rotation reminders, tray behavior, and native terminal launch
+- No account, cloud sync, telemetry, or private-key export
 
----
+## Requirements
 
-<!-- Badge Start -->
-<div align="center">
- <img alt="static badge from mantine" src="https://img.shields.io/badge/Mantine-v9.5.2-339AF0?logo=mantine&logoColor=339AF0">
- <img alt="static badge from nodejs" src="https://img.shields.io/badge/NodeJS-v24.19.0-44883e?logo=nodedotjs&logoColor=44883e">
- <img alt="static badge from electronjs" src="https://img.shields.io/badge/ElectronJS-v44.0.0-E73D2F?logo=electron&logoColor=E73D2F">
- <img alt="static badge from electron builder" src="https://img.shields.io/badge/Electron%20Builder-v26.15.3-undefined?logo=electronbuilder&logoColor=undefined">
- <img alt="static badge from typescript" src="https://img.shields.io/badge/TypeScript-v5.9.3-blue?logo=typescript&logoColor=blue">
- <img alt="static badge from reactjs" src="https://img.shields.io/badge/ReactJS-v19.2.8-61DAFB?logo=react&logoColor=61DAFB">
- <img alt="static badge from vite" src="https://img.shields.io/badge/Vite-v8.2.2-9135FF?logo=vite&logoColor=9135FF">
-</div>
-<!-- Badge End -->
+- Node.js 24.18 or newer
+- OpenSSH client tools (`ssh`, `ssh-keygen`, and `ssh-add`) available on `PATH`
+- Windows 10/11, current macOS, or a modern Linux desktop
 
----
+Remote rotation in v1 targets Unix/OpenSSH servers using `authorized_keys`.
 
-![banner](./demo/banner.png)
-
----
-
-## What's inside
-
-Demo pages that show what the stack can do out of the box:
-
-- **Home** — animated hero with gradient headline, floating tech icons and stack cards (versions pulled from `package.json`);
-- **Dashboard** — count-up stats, animated `RingProgress`, pure-CSS bar chart and activity timeline. Hit "Randomize data" and watch everything glide;
-- **Showcase** — interactive playground for Mantine transitions, skeleton loading, loaders, hover effects and an animated modal;
-- **System** — real Electron IPC: runtime versions, live memory/CPU polling every second and an IPC round-trip latency meter;
-- **Gallery / Messages / Search / Profile / Settings** — everyday UI patterns with staggered entrance animations.
-
-Under the hood: typed IPC bridge (`contextBridge` + shared types between main and renderer), shared CSS animation utilities (`src/styles/animations.css`), a `useCountUp` hook, and `prefers-reduced-motion` support everywhere.
-
----
-
-## Help
-
-- [Mantine](https://mantine.dev/)
-
-## Getting Started
+## Development
 
 ```bash
-# Clone this repository
-$ git clone https://github.com/saulotarsobc/sc-electron-boilerplate
-# Go into the repository
-$ cd sc-electron-boilerplate
-# Install dependencies
-$ npm install
-# Run the app
-$ npm run dev
+npm install
+npm run dev
 ```
 
----
+Quality checks:
 
-## Available Scripts
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "preview": "vite preview",
-    "build": "tsc && vite build",
-    "lint": "eslint . --ext .ts,.tsx",
-    "postinstall": "electron-builder install-app-deps",
-    "update-readme": "tsx scripts/update-readme.js",
-    "generate-electron-builder": "tsx scripts/generate-electron-builder.ts",
-    "dist:prepare": "npm run generate-electron-builder && npm run build",
-    "dist": "npm run dist:prepare && electron-builder",
-    "release": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/release.ps1",
-    "release:dry": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/release.ps1 -DryRun",
-    "release:notes": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/changelog.ps1",
-    "release:publish": "npm run dist:prepare && electron-builder --publish always",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"backend/**/*.{ts,tsx}\" \"scripts/**/*.{ts,tsx}\"",
-    "format:check": "prettier --check ."
-  }
-}
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
 ```
 
-## Auto-update
+Build an installer for the current platform:
 
-The app checks this repository's GitHub Releases on launch, downloads a newer version in the
-background, and shows a footer banner once the installer is ready.
-
-Publishing is a single command, run from a development machine:
-
-```powershell
-npm run release          # publishes the version already in package.json
-npm run release:dry      # simulates everything, creates no tag or release
-npm run release:notes    # prints just the changelog that would be used
-
-# To bump the version at the same time, call the script directly — npm does
-# not forward single-dash flags:
-pwsh ./scripts/release.ps1 -Bump patch
+```bash
+npm run dist
 ```
 
-`release.ps1` runs, in order: environment checks, version resolution, `tsc --noEmit` + `eslint`,
-pushes pending commits, creates and pushes the `vX.Y.Z` tag, builds the changelog from the
-commits, creates the GitHub Release, and runs `npm run dist` publishing the assets. At the end it
-downloads the published update manifest **without authentication** — exactly what a user's app
-does — to prove the update chain is actually working.
+Generated installers are written to `out/`.
 
-Every step is idempotent: running it again with the same version does not duplicate the tag or the
-release, and the assets are replaced.
+## Data and security model
 
-electron-builder only builds for the platform it runs on. Publishing from Windows uploads the NSIS
-installer and `latest.yml`; to add macOS and Linux artifacts, run this same script on those
-machines — the release already exists by then, so the new assets are appended to it.
+SSH files remain the source of truth. App metadata, policies, and audit records are stored under Electron's `userData` directory using atomic JSON writes. Archived keys are moved to a recoverable app-data area and cannot be archived while referenced by active hosts.
 
-**Before the first run**, authenticate the GitHub CLI with `gh auth login`. The script also accepts
-a `GH_TOKEN` environment variable or an `electron-builder.env` file (see
-`electron-builder.env.example`); the token needs the `repo` scope.
+Passwords and passphrases stay in memory unless the user explicitly enables persistence. Persistence is refused when Electron reports that a secure OS-backed storage provider is unavailable. Sensitive fields are redacted from audit output.
 
-## References
+The config organizer only sorts independent literal `Host` blocks inside safe regions. Before an organized config is written, the app compares normalized `ssh -G` output for affected hosts and aborts if effective configuration changes.
 
-- [Electron Builder](https://www.electron.build/)
-- [ElectronJS with NextJS](https://github.com/saulotarsobc/electronjs-with-nextjs)
-- [Electron](https://www.electronjs.org/)
-- [Vite](https://vite.dev/)
-- [Como criar um app Electron usando Vite](https://dev.to/rafaelberaldo/como-criar-um-app-electron-usando-vite-52d6) - [@rfberaldo](https://github.com/rfberaldo)
+## Releases
+
+Tags matching `vX.Y.Z` run verification and unsigned packaging on GitHub-hosted Windows, macOS, and Linux runners. The workflow publishes installers and updater manifests to the matching GitHub Release.
+
+Unsigned builds may trigger SmartScreen, Gatekeeper, or Linux package warnings. The builder and CI are structured so signing/notarization credentials can be added later without changing the release format. Never commit signing secrets; provide them through repository secrets and the platform-specific electron-builder environment variables.
+
+## Current scope
+
+FIDO2/hardware tokens, SSH certificates, specialized ProxyJump management, autonomous unattended rotation, and a full `known_hosts` editor are intentionally outside v1. Existing advanced OpenSSH directives remain available through the raw editor and are preserved.
+
+## License
+
+MIT

@@ -1,0 +1,30 @@
+.root {
+  --health-accent: var(--mantine-color-teal-5);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid
+    color-mix(in srgb, var(--health-accent) 26%, var(--mantine-color-dark-4));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--health-accent) 7%, var(--mantine-color-dark-7)),
+    var(--mantine-color-dark-8)
+  );
+}
+
+.root::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--health-accent);
+}
+
+.value {
+  font-size: 1.8rem;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.label {
+  color: var(--mantine-color-dimmed);
+}

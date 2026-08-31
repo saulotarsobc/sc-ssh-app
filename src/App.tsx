@@ -1,33 +1,59 @@
 import { AppLayout } from "@/components/Layout";
-import { MantineProvider } from "@mantine/core";
+import { Center, Loader, MantineProvider } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
+import { lazy, Suspense } from "react";
 import { Route, HashRouter as Router, Routes } from "react-router-dom";
-import { DashboardPage } from "./pages/dashboard";
-import { GalleryPage } from "./pages/gallery";
-import { HomePage } from "./pages/home";
-import { MessagesPage } from "./pages/messages";
-import { ProfilePage } from "./pages/profile";
-import { SearchPage } from "./pages/search";
-import { SettingsPage } from "./pages/settings";
-import { ShowcasePage } from "./pages/showcase";
-import { SystemPage } from "./pages/system";
 import theme from "./theme";
+
+const ActivityPage = lazy(() =>
+  import("./pages/activity").then((module) => ({
+    default: module.ActivityPage,
+  })),
+);
+const HostsPage = lazy(() =>
+  import("./pages/hosts").then((module) => ({ default: module.HostsPage })),
+);
+const KeysPage = lazy(() =>
+  import("./pages/keys").then((module) => ({ default: module.KeysPage })),
+);
+const OverviewPage = lazy(() =>
+  import("./pages/overview").then((module) => ({
+    default: module.OverviewPage,
+  })),
+);
+const RotationsPage = lazy(() =>
+  import("./pages/rotations").then((module) => ({
+    default: module.RotationsPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/settings").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
 
 function App() {
   return (
     <MantineProvider theme={theme} defaultColorScheme="dark">
+      <Notifications position="top-right" />
       <Router>
         <AppLayout>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/showcase" element={<ShowcasePage />} />
-            <Route path="/system" element={<SystemPage />} />
-            <Route path="/gallery" element={<GalleryPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <Center h="calc(100vh - 68px)">
+                <Loader aria-label="Loading page" />
+              </Center>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<OverviewPage />} />
+              <Route path="/keys" element={<KeysPage />} />
+              <Route path="/hosts" element={<HostsPage />} />
+              <Route path="/rotations" element={<RotationsPage />} />
+              <Route path="/activity" element={<ActivityPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </Suspense>
         </AppLayout>
       </Router>
     </MantineProvider>

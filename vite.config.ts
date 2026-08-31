@@ -15,7 +15,7 @@ import electron from "vite-plugin-electron/simple";
  */
 function externalize(...ids: string[]): Plugin {
   return {
-    name: "sc-boilerplate:externalize",
+    name: "sc-ssh-manager:externalize",
     // "pre" is required: without it Vite's own resolver would already have
     // turned the specifier into a file path before this hook runs.
     enforce: "pre",
@@ -40,14 +40,14 @@ export default defineConfig({
           // `require` and reads app-update.yml from resources/.
           // electron-builder copies production dependencies even with
           // `files` restricted to dist/**, so leaving it out here is enough.
-          plugins: [externalize("electron-updater")],
+          plugins: [externalize("electron-updater", "ssh2")],
           build: {
             outDir: "dist/backend",
           },
         },
       },
       preload: {
-        input: path.join(__dirname, "backend/preload.ts"),
+        input: path.join(import.meta.dirname, "backend/preload.ts"),
         vite: {
           build: {
             outDir: "dist/backend",
@@ -59,7 +59,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
 });
