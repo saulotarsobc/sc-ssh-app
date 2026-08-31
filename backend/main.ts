@@ -1,10 +1,21 @@
-import { app, BrowserWindow } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  Notification,
+  session,
+  shell,
+  Tray,
+} from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { displayName } from "../package.json";
+import { displayName, repository } from "../package.json";
 import { registerIpcHandlers } from "./utils/ipc";
 import { createAppMenu } from "./utils/menu";
 import { registerUpdateHandlers, setupAutoUpdater } from "./utils/updater";
+import { SshManager } from "./services/manager";
+import type { OperationProgress } from "../shared/contracts";
 
 // === Path Configuration ===
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +44,9 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 // === Application State ===
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let manager: SshManager | null = null;
+let isQuitting = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -46,7 +60,27 @@ function createWindow() {
       preload: path.join(__dirname, "preload.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (
+      url === repository.url ||
+      url === repository.url.replace(/\.git$/, "")
+    ) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (url !== mainWindow?.webContents.getURL()) event.preventDefault();
+  });
+  mainWindow.on("close", (event) => {
+    if (!isQuitting && manager?.store.settings.minimizeToTray) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
   });
 
   if (VITE_DEV_SERVER_URL) {
@@ -56,18 +90,87 @@ function createWindow() {
   }
 }
 
-app.on("ready", () => {
-  registerIpcHandlers();
+function broadcast(channel: string, value?: OperationProgress): void {
+  for (const window of BrowserWindow.getAllWindows())
+    window.webContents.send(channel, value);
+}
+
+function syncTray(): void {
+  if (!manager?.store.settings.minimizeToTray) {
+    tray?.destroy();
+    tray = null;
+    return;
+  }
+  if (tray) return;
+  tray = new Tray(
+    nativeImage.createFromPath(path.join(process.env.VITE_PUBLIC, "icon.ico")),
+  );
+  tray.setToolTip(displayName);
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Open",
+        click: () => {
+          mainWindow?.show();
+          mainWindow?.focus();
+        },
+      },
+      { type: "separator" },
+      {
+        label: "Quit",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("double-click", () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+}
+
+if (!app.requestSingleInstanceLock()) app.quit();
+
+app.whenReady().then(async () => {
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+  manager = new SshManager(
+    app.getPath("userData"),
+    (progress) => broadcast("manager:progress", progress),
+    () => {
+      broadcast("manager:changed");
+      syncTray();
+    },
+  );
+  await manager.initialize();
+  registerIpcHandlers(manager);
   registerUpdateHandlers();
   createWindow();
   createAppMenu();
+  syncTray();
   // After the window: update events are sent to open windows, and the check
   // starts as soon as the first one exists.
   setupAutoUpdater();
+  const summary = await manager.dashboardSummary();
+  if (summary.dueSoonCount > 0 && Notification.isSupported()) {
+    new Notification({
+      title: displayName,
+      body: `${summary.dueSoonCount} SSH ${summary.dueSoonCount === 1 ? "key needs" : "keys need"} rotation soon.`,
+    }).show();
+  }
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin" && !manager?.store.settings.minimizeToTray)
+    app.quit();
+});
+
+app.on("before-quit", () => {
+  isQuitting = true;
+  manager?.dispose();
 });
 
 app.on("second-instance", () => {
