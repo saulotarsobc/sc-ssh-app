@@ -1,0 +1,31 @@
+.hero {
+  padding-top: rem(48px);
+  padding-bottom: rem(32px);
+  text-align: center;
+}
+
+.title {
+  font-size: rem(56px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: rem(-2px);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    font-size: rem(38px);
+  }
+}
+
+/* Gradient fill for the animated headline (pairs with global .gradient-text) */
+.gradientText {
+  background-image: linear-gradient(
+    90deg,
+    var(--mantine-color-cyan-4),
+    var(--mantine-color-blue-5),
+    var(--mantine-color-grape-5),
+    var(--mantine-color-cyan-4)
+  );
+}
+
+.stackCard {
+  border-top: rem(3px) solid var(--stack-color);
+}

@@ -1,0 +1,61 @@
+/* Fixed-height stage so mounting/unmounting the demo card doesn't shift layout */
+.stage {
+  height: rem(180px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Hover effect: colored glow */
+.glowCard {
+  transition:
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.glowCard:hover {
+  border-color: var(--mantine-color-blue-5);
+  box-shadow: 0 0 28px rgba(34, 139, 230, 0.45);
+}
+
+/* Hover effect: light sweep */
+.shineCard {
+  position: relative;
+  overflow: hidden;
+}
+
+.shineCard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-130%) skewX(-20deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    transparent
+  );
+  transition: transform 0.6s ease;
+  pointer-events: none;
+}
+
+.shineCard:hover::after {
+  transform: translateX(130%) skewX(-20deg);
+}
+
+/* Hover effect: scale + tilt */
+.tiltCard {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tiltCard:hover {
+  transform: scale(1.04) rotate(-1.2deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glowCard,
+  .shineCard::after,
+  .tiltCard {
+    transition: none;
+  }
+}

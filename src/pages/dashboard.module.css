@@ -1,0 +1,60 @@
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: rem(8px);
+  height: rem(190px);
+  padding-top: rem(8px);
+}
+
+.barColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: rem(6px);
+  height: 100%;
+}
+
+.barTrack {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.bar {
+  width: 100%;
+  border-radius: rem(4px) rem(4px) 0 0;
+  background: linear-gradient(
+    180deg,
+    var(--mantine-color-cyan-4),
+    var(--mantine-color-blue-6)
+  );
+  transform-origin: bottom;
+  animation: grow-bar 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--stagger, 0) * 55ms);
+  transition:
+    height 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.15s ease;
+  cursor: pointer;
+}
+
+.bar:hover {
+  filter: brightness(1.25);
+}
+
+@keyframes grow-bar {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    animation: none;
+    transition: none;
+  }
+}

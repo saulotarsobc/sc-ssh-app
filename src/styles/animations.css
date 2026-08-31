@@ -1,0 +1,128 @@
+/*
+ * Shared animation utilities.
+ * Stagger entrances by setting the --stagger custom property inline:
+ *   <div className="fade-in-up" style={{ "--stagger": 2 }} />
+ */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes grow-bar {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(64, 192, 87, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(64, 192, 87, 0);
+  }
+}
+
+.fade-in-up {
+  opacity: 0;
+  animation: fade-in-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--stagger, 0) * 90ms);
+}
+
+.fade-in {
+  opacity: 0;
+  animation: fade-in 0.6s ease forwards;
+  animation-delay: calc(var(--stagger, 0) * 90ms);
+}
+
+.float {
+  animation: float 3.5s ease-in-out infinite;
+  animation-delay: calc(var(--stagger, 0) * 350ms);
+}
+
+/* Card that lifts and gains shadow on hover */
+.hover-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
+/* Animated gradient text — requires a background gradient on the element */
+.gradient-text {
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-shift 4s ease-in-out infinite;
+}
+
+/* Small green dot that pulses (live indicators) */
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--mantine-color-green-6);
+  animation: pulse-dot 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in-up,
+  .fade-in,
+  .float,
+  .gradient-text,
+  .pulse-dot {
+    animation: none;
+    opacity: 1;
+  }
+
+  .hover-lift,
+  .hover-lift:hover {
+    transition: none;
+    transform: none;
+  }
+}
