@@ -56,6 +56,7 @@ import type {
 import { PageHeader } from "../components/PageHeader/PageHeader";
 import { useManagerQuery } from "../hooks/useManagerQuery";
 import { action, unwrap } from "../lib/api";
+import { filterHosts } from "../lib/host-filter";
 
 interface HostValues {
   id?: string;
@@ -107,20 +108,7 @@ export function HostsPage() {
     error,
     reload,
   } = useManagerQuery(hostsLoader);
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredHosts = hosts.filter((host) =>
-    [
-      host.alias,
-      host.hostname,
-      host.user,
-      host.identityFile ?? "",
-      host.key?.fingerprint ?? "",
-      ...host.issues,
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(normalizedSearch),
-  );
+  const filteredHosts = filterHosts(hosts, search);
 
   const hostForm = useForm<HostValues>({
     mode: "uncontrolled",
@@ -392,8 +380,13 @@ export function HostsPage() {
             leftSection={<IconSearch size={17} />}
             placeholder="Search hosts by alias, address, or user"
             aria-label="Search hosts"
+            description={
+              search
+                ? `${filteredHosts.length} ${filteredHosts.length === 1 ? "host" : "hosts"} found`
+                : undefined
+            }
             value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
+            onInput={(event) => setSearch(event.currentTarget.value)}
           />
           {loading ? (
             <SimpleGrid cols={{ base: 1, md: 2 }}>
