@@ -3,7 +3,7 @@
   "displayName": "SC - SSH Keys Manager",
   "description": "A host-first desktop manager for simple, passwordless SSH access",
   "private": false,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "license": "MIT",
   "author": {
     "name": "Saulo Costa",
@@ -12,7 +12,9 @@
   "type": "module",
   "main": "dist/backend/main.js",
   "scripts": {
-    "dev": "vite",
+    "generate-electron-builder": "tsx scripts/generate-electron-builder.ts",
+    "dev:prepare": "npm run generate-electron-builder",
+    "dev": "npm run dev:prepare && vite",
     "preview": "vite preview",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
@@ -23,7 +25,6 @@
     "assets": "tsx scripts/generate-icons.ts",
     "postinstall": "electron-builder install-app-deps",
     "update-readme": "tsx scripts/update-readme.js",
-    "generate-electron-builder": "tsx scripts/generate-electron-builder.ts",
     "dist:prepare": "npm run generate-electron-builder && npm run build",
     "dist": "npm run dist:prepare && electron-builder",
     "release": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/release.ps1",

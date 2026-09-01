@@ -50,6 +50,7 @@ import { useNavigate } from "react-router-dom";
 import type {
   ConfigPreview,
   ConfigSnapshot,
+  ConnectionTestResult,
   HostRecord,
 } from "../../shared/contracts";
 import { PageHeader } from "../components/PageHeader/PageHeader";
@@ -88,6 +89,7 @@ export function HostsPage() {
   const [hostOpened, hostModal] = useDisclosure(false);
   const [setupOpened, setupModal] = useDisclosure(false);
   const [testHost, setTestHost] = useState<HostRecord>();
+  const [testResult, setTestResult] = useState<ConnectionTestResult>();
   const [deployHost, setDeployHost] = useState<HostRecord>();
   const [rawConfig, setRawConfig] = useState("");
   const [preview, setPreview] = useState<ConfigPreview>();
@@ -335,6 +337,7 @@ export function HostsPage() {
       }),
     );
     if (!result) return;
+    setTestResult(result);
     if (
       !result.success &&
       result.category === "host-key" &&
@@ -346,6 +349,7 @@ export function HostsPage() {
       return;
     }
     if (result.success) {
+      setTestResult(undefined);
       setUnknownFingerprint("");
       setTrustUnknownHost(false);
       setTestHost(undefined);
@@ -438,6 +442,7 @@ export function HostsPage() {
                           leftSection={<IconPlayerPlay size={16} />}
                           onClick={() => {
                             credentialsForm.reset();
+                            setTestResult(undefined);
                             setUnknownFingerprint("");
                             setTrustUnknownHost(false);
                             setTestHost(host);
@@ -521,32 +526,19 @@ export function HostsPage() {
                       <Text size="xs">{host.issues.join(" · ")}</Text>
                     </Alert>
                   )}
-                  <Group grow mt="md">
-                    <Button
-                      variant="light"
-                      leftSection={<IconKey size={17} />}
-                      disabled={!host.keyId}
-                      onClick={() => {
-                        deployForm.reset();
-                        setDeployFingerprint("");
-                        setTrustDeployHost(false);
-                        setDeployHost(host);
-                      }}
-                    >
-                      Enable access
-                    </Button>
-                    <Button
-                      leftSection={<IconTerminal2 size={17} />}
-                      onClick={() =>
-                        void action(
-                          window.sshManager.hosts.openTerminal(host.id),
-                          `Opened terminal for ${host.alias}`,
-                        )
-                      }
-                    >
-                      Connect
-                    </Button>
-                  </Group>
+                  <Button
+                    fullWidth
+                    mt="md"
+                    leftSection={<IconTerminal2 size={17} />}
+                    onClick={() =>
+                      void action(
+                        window.sshManager.hosts.openTerminal(host.id),
+                        `Opened terminal for ${host.alias}`,
+                      )
+                    }
+                  >
+                    Connect
+                  </Button>
                 </Card>
               ))}
             </SimpleGrid>
@@ -776,13 +768,13 @@ export function HostsPage() {
           setTrustDeployHost(false);
           setDeployHost(undefined);
         }}
-        title={`Enable passwordless access to ${deployHost?.alias ?? "host"}`}
+        title={`Repair passwordless access for ${deployHost?.alias ?? "host"}`}
       >
         <form onSubmit={submitDeploy}>
           <Stack>
             <Text c="dimmed" size="sm">
-              The configured public key will be added to the server and tested
-              before this operation succeeds.
+              Use this only when the connection test reports that the server no
+              longer accepts this host's configured key.
             </Text>
             <PasswordInput
               key={deployForm.key("password")}
@@ -821,7 +813,7 @@ export function HostsPage() {
                 loading={deployForm.submitting}
                 disabled={Boolean(deployFingerprint) && !trustDeployHost}
               >
-                Enable access
+                Repair access
               </Button>
             </Group>
           </Stack>
@@ -898,6 +890,7 @@ export function HostsPage() {
       <Modal
         opened={Boolean(testHost)}
         onClose={() => {
+          setTestResult(undefined);
           setUnknownFingerprint("");
           setTrustUnknownHost(false);
           setTestHost(undefined);
@@ -906,6 +899,39 @@ export function HostsPage() {
       >
         <form onSubmit={runTest}>
           <Stack>
+            {testResult &&
+              !testResult.success &&
+              !(testResult.category === "host-key" && unknownFingerprint) && (
+                <Alert
+                  color="red"
+                  title={
+                    testResult.category === "authentication"
+                      ? "SSH key was rejected"
+                      : "Connection failed"
+                  }
+                >
+                  <Text size="sm">{testResult.message}</Text>
+                  {testResult.category === "authentication" &&
+                    testHost?.keyId && (
+                      <Button
+                        mt="sm"
+                        size="xs"
+                        variant="light"
+                        leftSection={<IconKey size={15} />}
+                        onClick={() => {
+                          deployForm.reset();
+                          setDeployFingerprint("");
+                          setTrustDeployHost(false);
+                          setDeployHost(testHost);
+                          setTestResult(undefined);
+                          setTestHost(undefined);
+                        }}
+                      >
+                        Repair passwordless access
+                      </Button>
+                    )}
+                </Alert>
+              )}
             <PasswordInput
               key={credentialsForm.key("passphrase")}
               label="Key passphrase"
@@ -935,7 +961,13 @@ export function HostsPage() {
               </Alert>
             )}
             <Group justify="flex-end">
-              <Button variant="default" onClick={() => setTestHost(undefined)}>
+              <Button
+                variant="default"
+                onClick={() => {
+                  setTestResult(undefined);
+                  setTestHost(undefined);
+                }}
+              >
                 Cancel
               </Button>
               <Button
