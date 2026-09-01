@@ -20,7 +20,6 @@ import { useDisclosure } from "@mantine/hooks";
 import {
   IconActivityHeartbeat,
   IconBrandGithub,
-  IconKey,
   IconLockSquareRounded,
   IconRefresh,
   IconServer,
@@ -31,9 +30,8 @@ import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const links = [
-  { icon: IconShieldCheck, label: "Overview", path: "/" },
-  { icon: IconKey, label: "SSH keys", path: "/keys" },
-  { icon: IconServer, label: "Hosts & config", path: "/hosts" },
+  { icon: IconServer, label: "Hosts", path: "/" },
+  { icon: IconShieldCheck, label: "Overview", path: "/overview" },
   { icon: IconRefresh, label: "Rotations", path: "/rotations" },
   { icon: IconActivityHeartbeat, label: "Activity", path: "/activity" },
   { icon: IconSettings, label: "Settings", path: "/settings" },
@@ -70,7 +68,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div>
               <Title order={3}>SC - SSH Keys Manager</Title>
               <Text size="xs" c="dimmed">
-                Local-first identity security
+                Simple passwordless SSH
               </Text>
             </div>
           </Group>

@@ -492,18 +492,21 @@ export class RotationService {
     const sftp = await new Promise<SFTPWrapper>((resolve, reject) =>
       client.sftp((error, value) => (error ? reject(error) : resolve(value))),
     );
-    const home = await new Promise<string>((resolve, reject) =>
-      sftp.realpath(".", (error, value) =>
-        error ? reject(error) : resolve(value),
-      ),
-    );
-    const sshDirectory = path.posix.join(home.replace(/\\/g, "/"), ".ssh");
-    const authorizedPath = path.posix.join(sshDirectory, "authorized_keys");
-    await this.sftpMkdir(sftp, sshDirectory);
-    await this.sftpChmod(sftp, sshDirectory, 0o700);
-    const content = await this.sftpRead(sftp, authorizedPath);
-    await action(content, sftp, authorizedPath);
-    sftp.end();
+    try {
+      const home = await new Promise<string>((resolve, reject) =>
+        sftp.realpath(".", (error, value) =>
+          error ? reject(error) : resolve(value),
+        ),
+      );
+      const sshDirectory = path.posix.join(home.replace(/\\/g, "/"), ".ssh");
+      const authorizedPath = path.posix.join(sshDirectory, "authorized_keys");
+      await this.sftpMkdir(sftp, sshDirectory);
+      await this.sftpChmod(sftp, sshDirectory, 0o700);
+      const content = await this.sftpRead(sftp, authorizedPath);
+      await action(content, sftp, authorizedPath);
+    } finally {
+      sftp.end();
+    }
   }
 
   private async writeAuthorizedKeys(
@@ -523,9 +526,16 @@ export class RotationService {
     await this.sftpWrite(sftp, temporary, next);
     await this.sftpChmod(sftp, temporary, 0o600);
     await new Promise<void>((resolve, reject) =>
-      sftp.rename(temporary, authorizedPath, (error) =>
-        error ? reject(error) : resolve(),
-      ),
+      sftp.ext_openssh_rename(temporary, authorizedPath, (error) => {
+        if (error) {
+          reject(
+            new ManagerError(
+              "OPERATION_FAILED",
+              `Could not atomically replace authorized_keys: ${error.message}`,
+            ),
+          );
+        } else resolve();
+      }),
     );
     await this.sftpChmod(sftp, authorizedPath, 0o600);
   }

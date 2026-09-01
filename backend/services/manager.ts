@@ -108,7 +108,21 @@ export class SshManager {
         (candidate) =>
           candidate.privateKeyPath?.toLowerCase() === identity?.toLowerCase(),
       );
-      return { ...host, keyId: key?.id };
+      return {
+        ...host,
+        keyId: key?.id,
+        key: key
+          ? {
+              id: key.id,
+              fingerprint: key.fingerprint,
+              algorithm: key.algorithm,
+              encrypted: key.encrypted,
+              health: key.health,
+              rotationPolicy: key.rotationPolicy,
+              issues: key.issues,
+            }
+          : undefined,
+      };
     });
   }
 
@@ -217,8 +231,42 @@ export class SshManager {
   }
 
   async removeHost(id: string): Promise<void> {
+    const host = (await this.hosts()).find((item) => item.id === id);
+    if (!host) throw new ManagerError("NOT_FOUND", "Host was not found");
+    const key = host.keyId ? await this.keys.get(host.keyId, false) : undefined;
+    const keyIsDedicated =
+      key?.hostAliases.every(
+        (alias) => alias.toLowerCase() === host.alias.toLowerCase(),
+      ) ?? false;
+
     await this.config.removeHost(id);
-    await this.store.audit("host.deleted", "success", id, `Removed host ${id}`);
+    try {
+      if (key && keyIsDedicated) await this.keys.archive(key.id);
+    } catch (error) {
+      await this.config.saveHost(
+        {
+          id: undefined,
+          alias: host.alias,
+          hostname: host.hostname,
+          port: host.port,
+          user: host.user,
+          identityFile: host.identityFile,
+          identitiesOnly: host.identitiesOnly,
+          serverAliveInterval: host.serverAliveInterval,
+          additionalDirectives: host.additionalDirectives,
+        },
+        host.identityFile,
+      );
+      throw error;
+    }
+    await this.store.audit(
+      "host.deleted",
+      "success",
+      id,
+      key && keyIsDedicated
+        ? `Removed host ${host.alias} and archived its dedicated key`
+        : `Removed host ${host.alias}`,
+    );
     this.onChanged();
   }
 

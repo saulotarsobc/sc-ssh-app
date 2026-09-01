@@ -13,7 +13,6 @@ import {
   Stack,
   Stepper,
   Table,
-  TagsInput,
   Text,
   TextInput,
   ThemeIcon,
@@ -30,6 +29,7 @@ import {
   IconPlayerPlay,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { OperationProgress, RotationRun } from "../../shared/contracts";
 import { PageHeader } from "../components/PageHeader/PageHeader";
 import { ResourcePicker } from "../components/ResourcePicker/ResourcePicker";
@@ -37,19 +37,21 @@ import { useManagerQuery } from "../hooks/useManagerQuery";
 import { action } from "../lib/api";
 
 export function RotationsPage() {
+  const [searchParams] = useSearchParams();
+  const requestedHostId = searchParams.get("host");
   const [now] = useState(() => Date.now());
-  const [opened, modal] = useDisclosure(false);
-  const [selectedHost, setSelectedHost] = useState<string | null>(null);
+  const [opened, modal] = useDisclosure(Boolean(requestedHostId));
+  const [selectedHost, setSelectedHost] = useState<string | null>(
+    requestedHostId,
+  );
   const [currentProgress, setCurrentProgress] = useState<OperationProgress>();
   const [resultRun, setResultRun] = useState<RotationRun>();
   const hostsLoader = useCallback(() => window.sshManager.hosts.list(), []);
-  const keysLoader = useCallback(() => window.sshManager.keys.list(false), []);
   const rotationsLoader = useCallback(
     () => window.sshManager.rotations.list(),
     [],
   );
   const { data: hosts = [] } = useManagerQuery(hostsLoader);
-  const { data: keys = [] } = useManagerQuery(keysLoader);
   const { data: runs = [], reload } = useManagerQuery(rotationsLoader);
 
   useEffect(() => window.sshManager.events.onProgress(setCurrentProgress), []);
@@ -60,7 +62,6 @@ export function RotationsPage() {
       password: "",
       currentPassphrase: "",
       rememberCurrent: false,
-      name: "rotation",
       comment: "",
       newPassphrase: "",
       confirmPassphrase: "",
@@ -71,7 +72,6 @@ export function RotationsPage() {
       acceptHostFingerprint: "",
     },
     validate: (values) => ({
-      name: /^[a-zA-Z0-9._-]+$/.test(values.name) ? null : "Invalid key name",
       confirmPassphrase:
         values.newPassphrase === values.confirmPassphrase
           ? null
@@ -83,19 +83,22 @@ export function RotationsPage() {
     }),
   });
 
-  const dueKeys = useMemo(
+  const dueHosts = useMemo(
     () =>
-      keys.filter(
-        (key) =>
-          key.rotationPolicy.dueAt &&
-          new Date(key.rotationPolicy.dueAt).getTime() <= now + 14 * 86_400_000,
+      hosts.filter(
+        (host) =>
+          host.key?.rotationPolicy.dueAt &&
+          new Date(host.key.rotationPolicy.dueAt).getTime() <=
+            now + 14 * 86_400_000,
       ),
-    [keys, now],
+    [hosts, now],
   );
   const activeRun = resultRun ?? runs[0];
 
   const submit = form.onSubmit(async (values) => {
     if (!selectedHost) return;
+    const host = hosts.find((item) => item.id === selectedHost);
+    if (!host) return;
     const run = await action(
       window.sshManager.rotations.run({
         hostId: selectedHost,
@@ -112,7 +115,7 @@ export function RotationsPage() {
           acceptHostFingerprint: values.acceptHostFingerprint || undefined,
         },
         newKey: {
-          name: values.name,
+          name: `${host.alias}_rotation`,
           algorithm: "ed25519",
           comment: values.comment,
           passphrase: values.newPassphrase
@@ -144,8 +147,8 @@ export function RotationsPage() {
   return (
     <Container size="xl" py="xl">
       <PageHeader
-        title="Key rotations"
-        description="Replace remote credentials without creating a window where access can be lost."
+        title="Host access rotations"
+        description="Refresh a host's credential without creating a window where access can be lost."
         actions={
           <Button
             leftSection={<IconPlayerPlay size={18} />}
@@ -163,12 +166,12 @@ export function RotationsPage() {
       <SimpleGrid cols={{ base: 1, lg: 3 }} mb="lg">
         <Card withBorder>
           <Group>
-            <ThemeIcon color={dueKeys.length ? "yellow" : "teal"} size="xl">
+            <ThemeIcon color={dueHosts.length ? "yellow" : "teal"} size="xl">
               <IconCalendarDue />
             </ThemeIcon>
             <div>
               <Text c="dimmed">Due within 14 days</Text>
-              <Title order={2}>{dueKeys.length}</Title>
+              <Title order={2}>{dueHosts.length}</Title>
             </div>
           </Group>
         </Card>
@@ -216,31 +219,31 @@ export function RotationsPage() {
             Rotation queue
           </Title>
           <Stack>
-            {dueKeys.length ? (
-              dueKeys.map((key) => (
-                <Group key={key.id} justify="space-between">
+            {dueHosts.length ? (
+              dueHosts.map((host) => (
+                <Group key={host.id} justify="space-between">
                   <div>
-                    <Text fw={600}>{key.name}</Text>
+                    <Text fw={600}>{host.alias}</Text>
                     <Text size="xs" c="dimmed">
-                      {key.hostAliases.length
-                        ? key.hostAliases.join(", ")
-                        : "Not attached to a host"}
+                      {host.user}@{host.hostname}:{host.port}
                     </Text>
                   </div>
                   <Badge
                     color={
-                      new Date(key.rotationPolicy.dueAt!).getTime() <= now
+                      new Date(host.key!.rotationPolicy.dueAt!).getTime() <= now
                         ? "red"
                         : "yellow"
                     }
                   >
-                    {new Date(key.rotationPolicy.dueAt!).toLocaleDateString()}
+                    {new Date(
+                      host.key!.rotationPolicy.dueAt!,
+                    ).toLocaleDateString()}
                   </Badge>
                 </Group>
               ))
             ) : (
               <Alert color="teal" icon={<IconCheck size={18} />}>
-                No indexed keys are due for rotation.
+                No hosts are due for access rotation.
               </Alert>
             )}
           </Stack>
@@ -343,11 +346,7 @@ export function RotationsPage() {
               label="Host"
               placeholder="Search a simple host profile"
               value={selectedHost}
-              onChange={(value) => {
-                setSelectedHost(value);
-                const host = hosts.find((item) => item.id === value);
-                if (host) form.setFieldValue("name", `${host.alias}_rotation`);
-              }}
+              onChange={setSelectedHost}
               options={hosts
                 .filter((host) => host.simple && host.keyId)
                 .map((host) => ({
@@ -381,21 +380,10 @@ export function RotationsPage() {
               {...form.getInputProps("acceptHostFingerprint")}
             />
             <DividerLabel label="Replacement key" />
-            <TextInput
-              key={form.key("name")}
-              label="Key name"
-              {...form.getInputProps("name")}
-            />
-            <TextInput
-              key={form.key("comment")}
-              label="Comment"
-              {...form.getInputProps("comment")}
-            />
-            <TagsInput
-              key={form.key("tags")}
-              label="Tags"
-              {...form.getInputProps("tags")}
-            />
+            <Text size="sm" c="dimmed">
+              The replacement identity is generated and named automatically for
+              the selected host.
+            </Text>
             <PasswordInput
               key={form.key("newPassphrase")}
               label="New passphrase"

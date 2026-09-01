@@ -2,7 +2,12 @@ import { AppLayout } from "@/components/Layout";
 import { Center, Loader, MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { lazy, Suspense } from "react";
-import { Route, HashRouter as Router, Routes } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  HashRouter as Router,
+  Routes,
+} from "react-router-dom";
 import theme from "./theme";
 
 const ActivityPage = lazy(() =>
@@ -12,9 +17,6 @@ const ActivityPage = lazy(() =>
 );
 const HostsPage = lazy(() =>
   import("./pages/hosts").then((module) => ({ default: module.HostsPage })),
-);
-const KeysPage = lazy(() =>
-  import("./pages/keys").then((module) => ({ default: module.KeysPage })),
 );
 const OverviewPage = lazy(() =>
   import("./pages/overview").then((module) => ({
@@ -46,12 +48,14 @@ function App() {
             }
           >
             <Routes>
-              <Route path="/" element={<OverviewPage />} />
-              <Route path="/keys" element={<KeysPage />} />
-              <Route path="/hosts" element={<HostsPage />} />
+              <Route path="/" element={<HostsPage />} />
+              <Route path="/hosts" element={<Navigate to="/" replace />} />
+              <Route path="/keys" element={<Navigate to="/" replace />} />
+              <Route path="/overview" element={<OverviewPage />} />
               <Route path="/rotations" element={<RotationsPage />} />
               <Route path="/activity" element={<ActivityPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </AppLayout>

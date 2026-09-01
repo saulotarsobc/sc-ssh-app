@@ -1,6 +1,6 @@
 # SC - SSH Keys Manager
 
-A local-first desktop application for managing SSH identities, OpenSSH host configuration, key rotation, and `ssh-agent` from one place.
+A local-first desktop application for managing SSH hosts with simple, passwordless access. Add a host once and connect with `ssh alias`; the app handles its dedicated key in the background.
 
 The renderer never receives filesystem, process, or Electron access. All privileged operations run in Electron's main process through a narrow, validated `window.sshManager` API.
 
@@ -10,14 +10,14 @@ The renderer never receives filesystem, process, or Electron access. All privile
 
 ## Features
 
-- Inventory and health checks for keys in `~/.ssh`
-- ED25519 and RSA 4096 key creation, private-key import, metadata, tags, archive, restore, and permanent deletion
-- Public-key copy/export without exposing private material
-- Guided host CRUD plus a raw OpenSSH config editor with validation, diff review, atomic writes, and backups
+- Host-first home screen with search, connection status, test, connect, edit, rotate, and remove actions
+- One-step host setup: verify the server, create a dedicated ED25519 identity, install its public key, write OpenSSH config, and test `ssh alias`
+- Keys are implementation details attached to hosts rather than a separate workflow
+- Guided host lifecycle plus an advanced OpenSSH config editor with validation, diff review, atomic writes, and backups
 - Conservative alphabetical organization that preserves order-sensitive global directives, wildcards, `Include`, and `Match` barriers
 - Assisted remote rotation with preflight, `authorized_keys` backup, new-key test, rollback, revocation, and audit history
 - Host-key verification against `known_hosts`
-- `ssh-agent` inventory, add, remove, and interactive `ssh-add` for protected identities
+- `ssh-agent` diagnostics and support for protected identities
 - Optional OS-protected secret persistence through Electron `safeStorage`
 - Diagnostics, activity history, rotation reminders, tray behavior, and native terminal launch
 - No account, cloud sync, telemetry, or private-key export
@@ -56,7 +56,7 @@ Generated installers are written to `out/`.
 
 ## Data and security model
 
-SSH files remain the source of truth. App metadata, policies, and audit records are stored under Electron's `userData` directory using atomic JSON writes. Archived keys are moved to a recoverable app-data area and cannot be archived while referenced by active hosts.
+SSH files remain the source of truth. Each host created by the guided flow receives one dedicated identity. App metadata, policies, and audit records are stored under Electron's `userData` directory using atomic JSON writes. Removing a guided host also archives its dedicated key for recovery; shared identities are left untouched.
 
 Passwords and passphrases stay in memory unless the user explicitly enables persistence. Persistence is refused when Electron reports that a secure OS-backed storage provider is unavailable. Sensitive fields are redacted from audit output.
 

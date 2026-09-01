@@ -32,8 +32,8 @@ export function OverviewPage() {
   return (
     <Container size="xl" py="xl">
       <PageHeader
-        title="Security overview"
-        description="Your SSH identities, hosts, and rotation posture at a glance."
+        title="Host overview"
+        description="Connection health, credential rotation, and recent host activity."
       />
       {error && (
         <Alert color="red" icon={<IconAlertTriangle size={18} />} mb="lg">
@@ -43,17 +43,17 @@ export function OverviewPage() {
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg">
         <Skeleton visible={loading}>
           <HealthCard
-            label="Indexed keys"
-            value={data?.keyCount ?? 0}
-            icon={<IconKey size={24} />}
-          />
-        </Skeleton>
-        <Skeleton visible={loading}>
-          <HealthCard
             label="Configured hosts"
             value={data?.hostCount ?? 0}
             icon={<IconServer size={24} />}
             color="cyan"
+          />
+        </Skeleton>
+        <Skeleton visible={loading}>
+          <HealthCard
+            label="Host credentials"
+            value={data?.keyCount ?? 0}
+            icon={<IconKey size={24} />}
           />
         </Skeleton>
         <Skeleton visible={loading}>

@@ -14,7 +14,6 @@ import {
   NumberInput,
   PasswordInput,
   ScrollArea,
-  Select,
   SimpleGrid,
   Skeleton,
   Stack,
@@ -47,6 +46,7 @@ import {
 } from "@tabler/icons-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
   ConfigPreview,
   ConfigSnapshot,
@@ -63,6 +63,7 @@ interface HostValues {
   port: number;
   user: string;
   keyId: string;
+  identityFile: string;
   identitiesOnly: boolean;
   serverAliveInterval: number | string;
   additionalDirectives: string;
@@ -81,6 +82,7 @@ const directivesFromText = (value: string): Record<string, string> =>
   );
 
 export function HostsPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string | null>("hosts");
   const [search, setSearch] = useState("");
   const [hostOpened, hostModal] = useDisclosure(false);
@@ -110,6 +112,7 @@ export function HostsPage() {
       host.hostname,
       host.user,
       host.identityFile ?? "",
+      host.key?.fingerprint ?? "",
       ...host.issues,
     ]
       .join(" ")
@@ -125,6 +128,7 @@ export function HostsPage() {
       port: 22,
       user: "",
       keyId: "",
+      identityFile: "",
       identitiesOnly: true,
       serverAliveInterval: 60,
       additionalDirectives: "",
@@ -141,7 +145,6 @@ export function HostsPage() {
           ? null
           : "Port must be between 1 and 65535",
       user: (value) => (value.trim() ? null : "Username is required"),
-      keyId: (value) => (value ? null : "Choose an SSH key"),
     },
   });
   const credentialsForm = useForm({
@@ -233,6 +236,7 @@ export function HostsPage() {
       port: host.port,
       user: host.user,
       keyId: host.keyId ?? "",
+      identityFile: host.identityFile ?? "",
       identitiesOnly: host.identitiesOnly,
       serverAliveInterval: host.serverAliveInterval ?? "",
       additionalDirectives: Object.entries(host.additionalDirectives)
@@ -251,7 +255,8 @@ export function HostsPage() {
         hostname: values.hostname,
         port: Number(values.port),
         user: values.user,
-        keyId: values.keyId,
+        keyId: values.keyId || undefined,
+        identityFile: values.identityFile || undefined,
         identitiesOnly: true,
         serverAliveInterval:
           values.serverAliveInterval === ""
@@ -350,11 +355,11 @@ export function HostsPage() {
   return (
     <Container size="xl" py="xl">
       <PageHeader
-        title="Hosts & config"
-        description="Manage connection profiles without losing the semantics of your OpenSSH config."
+        title="SSH hosts"
+        description="Add a server once, then connect with its alias. Keys are managed automatically."
         actions={
           <Button leftSection={<IconPlus size={18} />} onClick={openCreate}>
-            Set up server
+            Add host
           </Button>
         }
       />
@@ -369,7 +374,7 @@ export function HostsPage() {
             Hosts
           </Tabs.Tab>
           <Tabs.Tab value="raw" leftSection={<IconBraces size={16} />}>
-            Raw config
+            Advanced config
           </Tabs.Tab>
           <Tabs.Tab value="backups" leftSection={<IconHistory size={16} />}>
             Backups
@@ -381,7 +386,7 @@ export function HostsPage() {
             mb="lg"
             maw={460}
             leftSection={<IconSearch size={17} />}
-            placeholder="Search by alias, address, user, or key path"
+            placeholder="Search hosts by alias, address, or user"
             aria-label="Search hosts"
             value={search}
             onChange={(event) => setSearch(event.currentTarget.value)}
@@ -400,7 +405,16 @@ export function HostsPage() {
                     <Group>
                       <IconDeviceDesktop color="var(--mantine-color-cyan-5)" />
                       <div>
-                        <Text fw={700}>{host.alias}</Text>
+                        <Group gap="xs">
+                          <Text fw={700}>{host.alias}</Text>
+                          <Badge
+                            size="xs"
+                            color={host.key ? "teal" : "yellow"}
+                            variant="light"
+                          >
+                            {host.key ? "identity configured" : "key missing"}
+                          </Badge>
+                        </Group>
                         <Text size="sm" c="dimmed">
                           {host.user}@{host.hostname}:{host.port}
                         </Text>
@@ -432,26 +446,15 @@ export function HostsPage() {
                           Test connection
                         </Menu.Item>
                         <Menu.Item
-                          leftSection={<IconKey size={16} />}
-                          disabled={!host.keyId}
-                          onClick={() => {
-                            deployForm.reset();
-                            setDeployFingerprint("");
-                            setTrustDeployHost(false);
-                            setDeployHost(host);
-                          }}
-                        >
-                          Enable passwordless access
-                        </Menu.Item>
-                        <Menu.Item
-                          leftSection={<IconTerminal2 size={16} />}
+                          leftSection={<IconRefresh size={16} />}
+                          disabled={!host.keyId || !host.simple}
                           onClick={() =>
-                            void action(
-                              window.sshManager.hosts.openTerminal(host.id),
+                            navigate(
+                              `/rotations?host=${encodeURIComponent(host.id)}`,
                             )
                           }
                         >
-                          Open terminal
+                          Rotate access key
                         </Menu.Item>
                         <Menu.Item
                           color="red"
@@ -460,13 +463,17 @@ export function HostsPage() {
                           onClick={() => {
                             if (
                               window.confirm(
-                                `Remove ${host.alias} from SSH config?`,
+                                `Remove ${host.alias}? Its dedicated key will be archived for recovery.`,
                               )
-                            )
-                              void action(
-                                window.sshManager.hosts.remove(host.id),
-                                "Host removed",
-                              );
+                            ) {
+                              void (async () => {
+                                await action(
+                                  window.sshManager.hosts.remove(host.id),
+                                  "Host removed",
+                                );
+                                await Promise.all([reload(), loadConfig()]);
+                              })();
+                            }
                           }}
                         >
                           Remove
@@ -485,6 +492,17 @@ export function HostsPage() {
                         : "fallback identities"}
                     </Badge>
                   </Group>
+                  {host.key && (
+                    <Group justify="space-between" mt="md" gap="xs">
+                      <Text size="xs" c="dimmed">
+                        {host.key.algorithm.toUpperCase()} ·{" "}
+                        {host.key.encrypted ? "protected" : "no passphrase"}
+                      </Text>
+                      <Text size="xs" ff="monospace" c="dimmed">
+                        {host.key.fingerprint.slice(0, 20)}…
+                      </Text>
+                    </Group>
+                  )}
                   <Text size="xs" ff="monospace" c="dimmed" mt="md" truncate>
                     {host.identityFile || "No IdentityFile directive"}
                   </Text>
@@ -503,6 +521,32 @@ export function HostsPage() {
                       <Text size="xs">{host.issues.join(" · ")}</Text>
                     </Alert>
                   )}
+                  <Group grow mt="md">
+                    <Button
+                      variant="light"
+                      leftSection={<IconKey size={17} />}
+                      disabled={!host.keyId}
+                      onClick={() => {
+                        deployForm.reset();
+                        setDeployFingerprint("");
+                        setTrustDeployHost(false);
+                        setDeployHost(host);
+                      }}
+                    >
+                      Enable access
+                    </Button>
+                    <Button
+                      leftSection={<IconTerminal2 size={17} />}
+                      onClick={() =>
+                        void action(
+                          window.sshManager.hosts.openTerminal(host.id),
+                          `Opened terminal for ${host.alias}`,
+                        )
+                      }
+                    >
+                      Connect
+                    </Button>
+                  </Group>
                 </Card>
               ))}
             </SimpleGrid>
@@ -520,10 +564,10 @@ export function HostsPage() {
                 <Text c="dimmed">
                   {search
                     ? `No hosts match “${search}”.`
-                    : "Add a guided host or edit your OpenSSH config directly."}
+                    : "Add a host and the app will create, install, and configure its key."}
                 </Text>
                 <Button onClick={search ? () => setSearch("") : openCreate}>
-                  {search ? "Clear search" : "Set up server"}
+                  {search ? "Clear search" : "Add host"}
                 </Button>
               </Stack>
             </Card>
@@ -630,7 +674,7 @@ export function HostsPage() {
           setTrustSetupHost(false);
           setupModal.close();
         }}
-        title="Set up passwordless SSH"
+        title="Add SSH host"
         size="lg"
       >
         <form onSubmit={submitSetup}>
@@ -671,21 +715,10 @@ export function HostsPage() {
               description="Used once to install the public key. It is not stored."
               {...setupForm.getInputProps("password")}
             />
-            <Select
-              key={setupForm.key("algorithm")}
-              label="Key algorithm"
-              data={[
-                { value: "ed25519", label: "ED25519 — recommended" },
-                { value: "rsa", label: "RSA 4096 — legacy compatibility" },
-              ]}
-              {...setupForm.getInputProps("algorithm")}
-            />
-            <TextInput
-              key={setupForm.key("comment")}
-              label="Key comment"
-              placeholder="Defaults to user@host"
-              {...setupForm.getInputProps("comment")}
-            />
+            <Text size="sm" c="dimmed">
+              A dedicated ED25519 identity will be created automatically for
+              this host.
+            </Text>
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <PasswordInput
                 key={setupForm.key("passphrase")}
@@ -729,7 +762,7 @@ export function HostsPage() {
                 disabled={Boolean(setupFingerprint) && !trustSetupHost}
                 leftSection={<IconRocket size={17} />}
               >
-                Set up server
+                Add host
               </Button>
             </Group>
           </Stack>

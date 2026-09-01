@@ -34,6 +34,16 @@ export interface SshKeyRecord {
   issues: string[];
 }
 
+export interface HostKeySummary {
+  id: string;
+  fingerprint: string;
+  algorithm: KeyAlgorithm;
+  encrypted: boolean;
+  health: HealthLevel;
+  rotationPolicy: RotationPolicy;
+  issues: string[];
+}
+
 export interface HostRecord {
   id: string;
   alias: string;
@@ -42,6 +52,7 @@ export interface HostRecord {
   user: string;
   identityFile?: string;
   keyId?: string;
+  key?: HostKeySummary;
   identitiesOnly: boolean;
   serverAliveInterval?: number;
   additionalDirectives: Record<string, string>;
