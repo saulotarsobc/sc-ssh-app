@@ -10,6 +10,7 @@ describe("metadata and audit storage", () => {
     try {
       const store = new MetadataStore(root, path.join(root, ".ssh"));
       await store.initialize();
+      expect(store.settings.retainRemoteAuthorizedKeysBackups).toBe(true);
       await store.audit(
         "host.tested",
         "failure",

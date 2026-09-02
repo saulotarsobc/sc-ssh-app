@@ -26,6 +26,7 @@ const stepDefinitions: Array<[string, string]> = [
   ["switch-config", "Update local SSH config"],
   ["revoke-old", "Revoke previous remote key"],
   ["archive-old", "Archive previous local key"],
+  ["cleanup-backups", "Apply remote backup retention"],
 ];
 
 const authorizedFingerprint = (line: string): string | undefined => {
@@ -51,6 +52,9 @@ export const mergeAuthorizedKey = (
   lines.push(publicKey.trim());
   return { content: `${lines.join("\n")}\n`, added: true };
 };
+
+export const managedAuthorizedKeysBackupNames = (names: string[]): string[] =>
+  names.filter((name) => name.startsWith("authorized_keys.sc-ssh-backup."));
 
 const asHostInput = (host: HostRecord, key?: SshKeyRecord): HostInput => ({
   id: host.id,
@@ -126,13 +130,37 @@ export class RotationService {
         `The key was installed but verification failed: ${test.message}`,
       );
     }
+    let cleanupWarning: string | undefined;
+    if (!this.store.settings.retainRemoteAuthorizedKeysBackups) {
+      try {
+        const cleanupConnection = await this.connections.connect(host, key, {
+          passphrase: credentials.passphrase,
+          acceptHostFingerprint: credentials.acceptHostFingerprint,
+        });
+        try {
+          await this.removeManagedRemoteBackups(cleanupConnection.client);
+        } finally {
+          cleanupConnection.client.end();
+        }
+      } catch (error) {
+        cleanupWarning = `Key installation succeeded, but remote backup cleanup failed: ${error instanceof Error ? error.message : "unknown error"}`;
+        await this.store.audit(
+          "host.key-installed",
+          "failure",
+          host.alias,
+          cleanupWarning,
+        );
+      }
+    }
     await this.store.audit(
       "host.key-installed",
       "success",
       host.alias,
       `${added ? "Installed and verified" : "Verified existing"} public key ${key.fingerprint}`,
     );
-    return test;
+    return cleanupWarning
+      ? { ...test, message: `${test.message}. ${cleanupWarning}` }
+      : test;
   }
 
   private async connectWithPassword(
@@ -315,6 +343,45 @@ export class RotationService {
       this.startStep(run, "archive-old");
       await this.keys.archive(oldKey.id);
       this.completeStep(run, "archive-old", "Previous local key archived");
+
+      if (this.store.settings.retainRemoteAuthorizedKeysBackups) {
+        this.skipStep(
+          run,
+          "cleanup-backups",
+          "Remote backups retained by settings",
+        );
+      } else {
+        this.startStep(run, "cleanup-backups");
+        try {
+          const cleanupConnection = await this.connections.connect(
+            host,
+            newKey,
+            newCredentials,
+          );
+          let removed: number;
+          try {
+            removed = await this.removeManagedRemoteBackups(
+              cleanupConnection.client,
+            );
+          } finally {
+            cleanupConnection.client.end();
+          }
+          this.completeStep(
+            run,
+            "cleanup-backups",
+            `Removed ${removed} remote ${removed === 1 ? "backup" : "backups"}`,
+          );
+        } catch (error) {
+          const cleanupStep = run.steps.find(
+            (step) => step.id === "cleanup-backups",
+          )!;
+          cleanupStep.state = "failed";
+          cleanupStep.message =
+            error instanceof Error ? error.message : "Backup cleanup failed";
+          cleanupStep.completedAt = new Date().toISOString();
+          run.error = `Rotation succeeded, but remote backup cleanup failed: ${cleanupStep.message}`;
+        }
+      }
       run.state = "completed";
       run.completedAt = new Date().toISOString();
       await this.store.saveRotation(run);
@@ -504,6 +571,42 @@ export class RotationService {
       await this.sftpChmod(sftp, sshDirectory, 0o700);
       const content = await this.sftpRead(sftp, authorizedPath);
       await action(content, sftp, authorizedPath);
+    } finally {
+      sftp.end();
+    }
+  }
+
+  private async removeManagedRemoteBackups(client: Client): Promise<number> {
+    const sftp = await new Promise<SFTPWrapper>((resolve, reject) =>
+      client.sftp((error, value) => (error ? reject(error) : resolve(value))),
+    );
+    try {
+      const home = await new Promise<string>((resolve, reject) =>
+        sftp.realpath(".", (error, value) =>
+          error ? reject(error) : resolve(value),
+        ),
+      );
+      const sshDirectory = path.posix.join(home.replace(/\\/g, "/"), ".ssh");
+      const entries = await new Promise<Array<{ filename: string }>>(
+        (resolve, reject) =>
+          sftp.readdir(sshDirectory, (error, list) =>
+            error ? reject(error) : resolve(list),
+          ),
+      );
+      const backupNames = managedAuthorizedKeysBackupNames(
+        entries.map((entry) => entry.filename),
+      );
+      await Promise.all(
+        backupNames.map(
+          (name) =>
+            new Promise<void>((resolve, reject) =>
+              sftp.unlink(path.posix.join(sshDirectory, name), (error) =>
+                error ? reject(error) : resolve(),
+              ),
+            ),
+        ),
+      );
+      return backupNames.length;
     } finally {
       sftp.end();
     }

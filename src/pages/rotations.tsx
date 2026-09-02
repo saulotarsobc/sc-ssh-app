@@ -28,13 +28,28 @@ import {
   IconHistory,
   IconPlayerPlay,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { OperationProgress, RotationRun } from "../../shared/contracts";
+import type {
+  OperationProgress,
+  RotationInput,
+  RotationRun,
+} from "../../shared/contracts";
 import { PageHeader } from "../components/PageHeader/PageHeader";
 import { ResourcePicker } from "../components/ResourcePicker/ResourcePicker";
 import { useManagerQuery } from "../hooks/useManagerQuery";
 import { action } from "../lib/api";
+
+const rotationSteps = [
+  ["preflight", "Verify local and remote access"],
+  ["generate", "Generate replacement key"],
+  ["install", "Install replacement key remotely"],
+  ["test-new", "Authenticate with replacement key"],
+  ["switch-config", "Update local SSH config"],
+  ["revoke-old", "Revoke previous remote key"],
+  ["archive-old", "Archive previous local key"],
+  ["cleanup-backups", "Apply remote backup retention"],
+] as const;
 
 export function RotationsPage() {
   const [searchParams] = useSearchParams();
@@ -46,6 +61,7 @@ export function RotationsPage() {
   );
   const [currentProgress, setCurrentProgress] = useState<OperationProgress>();
   const [resultRun, setResultRun] = useState<RotationRun>();
+  const workflowRef = useRef<HTMLDivElement>(null);
   const hostsLoader = useCallback(() => window.sshManager.hosts.list(), []);
   const rotationsLoader = useCallback(
     () => window.sshManager.rotations.list(),
@@ -54,7 +70,51 @@ export function RotationsPage() {
   const { data: hosts = [] } = useManagerQuery(hostsLoader);
   const { data: runs = [], reload } = useManagerQuery(rotationsLoader);
 
-  useEffect(() => window.sshManager.events.onProgress(setCurrentProgress), []);
+  useEffect(
+    () =>
+      window.sshManager.events.onProgress((progress) => {
+        if (progress.scope !== "rotation") return;
+        setCurrentProgress(progress);
+        setResultRun((current) => {
+          if (!current || current.state !== "running") return current;
+          const stepIndex = current.steps.findIndex(
+            (step) => step.id === progress.step,
+          );
+          if (stepIndex < 0) return current;
+
+          const steps = current.steps.map((step, index) => {
+            if (index < stepIndex) {
+              if (step.state === "running") {
+                return { ...step, state: "completed" as const };
+              }
+              if (step.state === "pending") {
+                return { ...step, state: "skipped" as const };
+              }
+            }
+            if (index !== stepIndex) return step;
+            if (step.state === "running") {
+              return {
+                ...step,
+                state: "completed" as const,
+                message: progress.message,
+              };
+            }
+            return { ...step, state: "running" as const };
+          });
+
+          return { ...current, id: progress.operationId, steps };
+        });
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    if (resultRun?.state !== "running") return;
+    workflowRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [resultRun?.state]);
 
   const form = useForm({
     mode: "uncontrolled",
@@ -99,40 +159,64 @@ export function RotationsPage() {
     if (!selectedHost) return;
     const host = hosts.find((item) => item.id === selectedHost);
     if (!host) return;
-    const run = await action(
-      window.sshManager.rotations.run({
-        hostId: selectedHost,
-        credentials: {
-          password: values.password
-            ? { value: values.password, remember: false }
-            : undefined,
-          passphrase: values.currentPassphrase
-            ? {
-                value: values.currentPassphrase,
-                remember: values.rememberCurrent,
-              }
-            : undefined,
-          acceptHostFingerprint: values.acceptHostFingerprint || undefined,
-        },
-        newKey: {
-          name: `${host.alias}_rotation`,
-          algorithm: "ed25519",
-          comment: values.comment,
-          passphrase: values.newPassphrase
-            ? { value: values.newPassphrase, remember: values.rememberNew }
-            : undefined,
-          tags: values.tags,
-          rotationIntervalDays: 90,
-          rotationReminderDays: 14,
-          allowUnprotected: values.allowUnprotected,
-        },
-        revokeOldKey: values.revokeOldKey,
-      }),
-    );
-    if (!run) return;
-    setResultRun(run);
+    const rotationInput = {
+      hostId: selectedHost,
+      credentials: {
+        password: values.password
+          ? { value: values.password, remember: false }
+          : undefined,
+        passphrase: values.currentPassphrase
+          ? {
+              value: values.currentPassphrase,
+              remember: values.rememberCurrent,
+            }
+          : undefined,
+        acceptHostFingerprint: values.acceptHostFingerprint || undefined,
+      },
+      newKey: {
+        name: `${host.alias}_rotation`,
+        algorithm: "ed25519",
+        comment: values.comment,
+        passphrase: values.newPassphrase
+          ? { value: values.newPassphrase, remember: values.rememberNew }
+          : undefined,
+        tags: values.tags,
+        rotationIntervalDays: 90,
+        rotationReminderDays: 14,
+        allowUnprotected: values.allowUnprotected,
+      },
+      revokeOldKey: values.revokeOldKey,
+    } satisfies RotationInput;
+
+    setCurrentProgress(undefined);
+    setResultRun({
+      id: `pending-${host.id}`,
+      hostId: host.id,
+      hostAlias: host.alias,
+      state: "running",
+      startedAt: new Date().toISOString(),
+      steps: rotationSteps.map(([id, label]) => ({
+        id,
+        label,
+        state: "pending",
+      })),
+    });
     modal.close();
-    await reload();
+
+    try {
+      const run = await action(window.sshManager.rotations.run(rotationInput));
+      setResultRun(run);
+      setCurrentProgress(undefined);
+      if (run.state === "completed") {
+        form.reset();
+        setSelectedHost(null);
+      }
+      await reload();
+    } catch {
+      setResultRun(undefined);
+      setCurrentProgress(undefined);
+      modal.open();
+    }
   });
 
   const statusColor = (state: RotationRun["state"]) =>
@@ -249,7 +333,18 @@ export function RotationsPage() {
           </Stack>
         </Card>
 
-        <Card withBorder>
+        <Card
+          ref={workflowRef}
+          withBorder
+          shadow={activeRun?.state === "running" ? "md" : undefined}
+          style={{
+            borderColor:
+              activeRun?.state === "running"
+                ? "var(--mantine-color-cyan-6)"
+                : undefined,
+            transition: "border-color 180ms ease, box-shadow 180ms ease",
+          }}
+        >
           <Title order={3} mb="lg">
             Latest workflow
           </Title>
@@ -412,7 +507,8 @@ export function RotationsPage() {
             />
             <Alert color="yellow">
               Remote changes are backed up as{" "}
-              <Code>authorized_keys.sc-ssh-backup.*</Code>.
+              <Code>authorized_keys.sc-ssh-backup.*</Code> for rollback.
+              Retention after a successful rotation follows Settings.
             </Alert>
             <Group justify="flex-end">
               <Button variant="default" onClick={modal.close}>

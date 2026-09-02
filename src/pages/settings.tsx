@@ -34,6 +34,7 @@ const defaults: AppSettings = {
   minimizeToTray: false,
   rotationIntervalDays: 90,
   rotationReminderDays: 14,
+  retainRemoteAuthorizedKeysBackups: true,
   autoOrganizeConfig: true,
 };
 
@@ -142,6 +143,14 @@ export function SettingsPage() {
                 min={0}
                 max={365}
                 {...form.getInputProps("rotationReminderDays")}
+              />
+              <Switch
+                key={form.key("retainRemoteAuthorizedKeysBackups")}
+                label="Keep remote authorized_keys backups after success"
+                description="When disabled, SC SSH backups are kept during the operation for rollback and removed after a successful key installation or rotation. Failed operations keep their backups."
+                {...form.getInputProps("retainRemoteAuthorizedKeysBackups", {
+                  type: "checkbox",
+                })}
               />
               <Switch
                 key={form.key("autoOrganizeConfig")}

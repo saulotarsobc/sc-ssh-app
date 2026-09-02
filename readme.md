@@ -15,7 +15,7 @@ The renderer never receives filesystem, process, or Electron access. All privile
 - Keys are implementation details attached to hosts rather than a separate workflow
 - Guided host lifecycle plus an advanced OpenSSH config editor with validation, diff review, atomic writes, and backups
 - Conservative alphabetical organization that preserves order-sensitive global directives, wildcards, `Include`, and `Match` barriers
-- Assisted remote rotation with preflight, `authorized_keys` backup, new-key test, rollback, revocation, and audit history
+- Assisted remote rotation with preflight, configurable `authorized_keys` backup retention, new-key test, rollback, revocation, and audit history
 - Host-key verification against `known_hosts`
 - `ssh-agent` diagnostics and support for protected identities
 - Optional OS-protected secret persistence through Electron `safeStorage`

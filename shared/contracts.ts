@@ -131,6 +131,7 @@ export interface AppSettings {
   minimizeToTray: boolean;
   rotationIntervalDays: number;
   rotationReminderDays: number;
+  retainRemoteAuthorizedKeysBackups: boolean;
   autoOrganizeConfig: boolean;
 }
 

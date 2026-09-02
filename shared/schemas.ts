@@ -126,5 +126,6 @@ export const appSettingsSchema = z.object({
   minimizeToTray: z.boolean(),
   rotationIntervalDays: z.number().int().min(1).max(3650),
   rotationReminderDays: z.number().int().min(0).max(365),
+  retainRemoteAuthorizedKeysBackups: z.boolean(),
   autoOrganizeConfig: z.boolean(),
 });

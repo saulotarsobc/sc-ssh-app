@@ -38,6 +38,7 @@ const defaultSettings = (sshDirectory: string): AppSettings => ({
   minimizeToTray: false,
   rotationIntervalDays: 90,
   rotationReminderDays: 14,
+  retainRemoteAuthorizedKeysBackups: true,
   autoOrganizeConfig: true,
 });
 

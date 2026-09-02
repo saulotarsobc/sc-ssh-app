@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { fingerprintPublicKey } from "../backend/services/keys";
-import { mergeAuthorizedKey } from "../backend/services/rotation";
+import {
+  managedAuthorizedKeysBackupNames,
+  mergeAuthorizedKey,
+} from "../backend/services/rotation";
 
 const publicKey =
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPXCOiWPhrKioXfJ1ZBoTrQvaAIvPk5pVQ1NQqXhGf/5 test";
@@ -26,5 +29,18 @@ describe("authorized_keys merge", () => {
       fingerprintPublicKey(publicKey),
     );
     expect(result).toEqual({ content, added: false });
+  });
+});
+
+describe("authorized_keys backup cleanup", () => {
+  it("selects only backups managed by SC SSH", () => {
+    expect(
+      managedAuthorizedKeysBackupNames([
+        "authorized_keys",
+        "authorized_keys.sc-ssh-backup.2026-09-02T11-12-08-567Z",
+        "authorized_keys.sc-ssh-random.tmp",
+        "authorized_keys.manual-backup",
+      ]),
+    ).toEqual(["authorized_keys.sc-ssh-backup.2026-09-02T11-12-08-567Z"]);
   });
 });
