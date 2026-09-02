@@ -3,7 +3,7 @@
   "displayName": "SC - SSH Keys Manager",
   "description": "A host-first desktop manager for simple, passwordless SSH access",
   "private": false,
-  "version": "1.2.2",
+  "version": "1.3.0",
   "license": "MIT",
   "author": {
     "name": "Saulo Costa",
